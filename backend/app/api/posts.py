@@ -1,0 +1,259 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from ..api.deps import get_current_user
+from ..db.database import get_db
+from ..models.user import User
+from ..models.post import Post
+from ..schemas.post import PostCreate, PostUpdate
+from ..mock.data import MOCK_POSTS
+from ..core.config import settings
+import uuid, random
+
+router = APIRouter(prefix="/posts", tags=["posts"])
+
+
+def _post_to_dict(p: Post) -> dict:
+    return {
+        "id": p.id,
+        "caption": p.caption,
+        "hashtags": p.hashtags or [],
+        "media_urls": p.media_urls or [],
+        "media_type": p.media_type,
+        "status": p.status,
+        "scheduled_at": p.scheduled_at.isoformat() if p.scheduled_at else None,
+        "published_at": p.published_at.isoformat() if p.published_at else None,
+        "ai_generated": p.ai_generated,
+        "predicted_engagement_score": p.predicted_engagement_score,
+        "sentiment": p.sentiment,
+        "total_impressions": p.total_impressions,
+        "total_engagements": p.total_engagements,
+        "content_roi_score": p.content_roi_score,
+        "platform_account_ids": p.platform_account_ids or [],
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    }
+
+
+@router.get("")
+def list_posts(
+    status: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if settings.USE_MOCK_DATA:
+        posts = MOCK_POSTS
+        if status:
+            posts = [p for p in posts if p["status"] == status]
+        return posts
+
+    query = db.query(Post).filter(Post.user_id == current_user.id)
+    if status:
+        query = query.filter(Post.status == status)
+    return [_post_to_dict(p) for p in query.order_by(Post.created_at.desc()).all()]
+
+
+@router.get("/{post_id}/analytics")
+def post_analytics(post_id: str, current_user: User = Depends(get_current_user)):
+    rng = random.Random(sum(ord(c) for c in post_id))
+    impressions = rng.randint(1200, 45000)
+    reach = int(impressions * rng.uniform(0.55, 0.85))
+    likes = int(impressions * rng.uniform(0.03, 0.12))
+    comments = int(likes * rng.uniform(0.05, 0.2))
+    saves = int(likes * rng.uniform(0.1, 0.4))
+    shares = int(likes * rng.uniform(0.05, 0.25))
+    eng_rate = round((likes + comments + saves + shares) / max(reach, 1) * 100, 2)
+    daily = []
+    base = impressions // 7
+    for i in range(7):
+        day_impr = int(base * (1.8 if i == 0 else 1.3 if i == 1 else rng.uniform(0.5, 1.0)))
+        daily.append({"day": f"Day {i+1}", "impressions": day_impr, "engagements": int(day_impr * rng.uniform(0.04, 0.12))})
+    platforms = ["instagram", "twitter", "linkedin"]
+    platform_split = []
+    remaining = 100
+    for j, p in enumerate(platforms):
+        pct = rng.randint(20, 50) if j < len(platforms) - 1 else remaining
+        remaining -= pct
+        platform_split.append({"platform": p, "pct": max(pct, 0), "impressions": int(impressions * pct / 100)})
+    return {
+        "post_id": post_id,
+        "impressions": impressions,
+        "reach": reach,
+        "likes": likes,
+        "comments": comments,
+        "saves": saves,
+        "shares": shares,
+        "engagement_rate": eng_rate,
+        "daily_series": daily,
+        "platform_split": platform_split,
+        "top_country": "Nigeria",
+        "top_age_group": "25–34",
+        "profile_visits": int(impressions * rng.uniform(0.02, 0.08)),
+        "link_clicks": int(impressions * rng.uniform(0.01, 0.05)),
+    }
+
+
+@router.get("/{post_id}")
+def get_post(
+    post_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if settings.USE_MOCK_DATA:
+        for p in MOCK_POSTS:
+            if p["id"] == post_id:
+                return p
+        raise HTTPException(status_code=404, detail="Not found")
+
+    post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Not found")
+    return _post_to_dict(post)
+
+
+@router.post("", status_code=201)
+def create_post(
+    body: PostCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if settings.USE_MOCK_DATA:
+        new_post = {
+            "id": f"post-{uuid.uuid4().hex[:8]}",
+            "caption": body.caption,
+            "hashtags": body.hashtags,
+            "media_urls": body.media_urls,
+            "media_type": body.media_type,
+            "status": "scheduled" if body.scheduled_at else "draft",
+            "scheduled_at": body.scheduled_at.isoformat() if body.scheduled_at else None,
+            "published_at": None,
+            "ai_generated": False,
+            "predicted_engagement_score": random.randint(60, 95),
+            "sentiment": "positive",
+            "total_impressions": 0,
+            "total_engagements": 0,
+            "content_roi_score": None,
+            "platform_account_ids": body.platform_account_ids,
+        }
+        MOCK_POSTS.append(new_post)
+        return new_post
+
+    post = Post(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        caption=body.caption,
+        hashtags=body.hashtags,
+        media_urls=body.media_urls,
+        media_type=body.media_type,
+        status="scheduled" if body.scheduled_at else "draft",
+        scheduled_at=body.scheduled_at,
+        platform_account_ids=body.platform_account_ids,
+        ai_generated=False,
+        predicted_engagement_score=random.randint(60, 95),
+        sentiment="positive",
+    )
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+    return _post_to_dict(post)
+
+
+@router.post("/queue", status_code=201)
+def add_to_queue(
+    body: PostCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    slots = ["9:00 AM", "12:00 PM", "3:00 PM", "6:00 PM", "9:00 PM"]
+    if settings.USE_MOCK_DATA:
+        queued = [p for p in MOCK_POSTS if p.get("status") == "queued"]
+        slot = slots[len(queued) % len(slots)]
+        new_post = {
+            "id": f"q-{uuid.uuid4().hex[:8]}",
+            "caption": body.caption,
+            "hashtags": body.hashtags,
+            "media_urls": body.media_urls or [],
+            "media_type": body.media_type,
+            "status": "queued",
+            "scheduled_at": None,
+            "queue_slot": slot,
+            "queue_position": len(queued) + 1,
+            "published_at": None,
+            "ai_generated": False,
+            "predicted_engagement_score": random.randint(60, 95),
+            "sentiment": "positive",
+            "total_impressions": 0,
+            "total_engagements": 0,
+            "platform_account_ids": body.platform_account_ids,
+        }
+        MOCK_POSTS.append(new_post)
+        return new_post
+
+    queued_count = db.query(Post).filter(Post.user_id == current_user.id, Post.status == "queued").count()
+    slot = slots[queued_count % len(slots)]
+    post = Post(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        caption=body.caption,
+        hashtags=body.hashtags,
+        media_urls=body.media_urls or [],
+        media_type=body.media_type,
+        status="queued",
+        platform_account_ids=body.platform_account_ids,
+        ai_generated=False,
+        predicted_engagement_score=random.randint(60, 95),
+        sentiment="positive",
+    )
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+    result = _post_to_dict(post)
+    result["queue_slot"] = slot
+    result["queue_position"] = queued_count + 1
+    return result
+
+
+@router.patch("/{post_id}")
+def update_post(
+    post_id: str,
+    body: PostUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if settings.USE_MOCK_DATA:
+        for p in MOCK_POSTS:
+            if p["id"] == post_id:
+                if body.caption is not None:
+                    p["caption"] = body.caption
+                if body.status is not None:
+                    p["status"] = body.status
+                return p
+        raise HTTPException(status_code=404, detail="Not found")
+
+    post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Not found")
+    if body.caption is not None:
+        post.caption = body.caption
+    if body.status is not None:
+        post.status = body.status
+    if body.scheduled_at is not None:
+        post.scheduled_at = body.scheduled_at
+    db.commit()
+    db.refresh(post)
+    return _post_to_dict(post)
+
+
+@router.delete("/{post_id}", status_code=204)
+def delete_post(
+    post_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if settings.USE_MOCK_DATA:
+        global MOCK_POSTS
+        MOCK_POSTS = [p for p in MOCK_POSTS if p["id"] != post_id]
+        return
+
+    post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
+    if post:
+        db.delete(post)
+        db.commit()
