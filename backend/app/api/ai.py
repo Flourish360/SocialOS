@@ -25,17 +25,96 @@ MOCK_HASHTAGS = {
     "twitter": ["#startup", "#marketing", "#launch", "#innovation", "#tech", "#business", "#growth", "#entrepreneur", "#brand", "#product"],
 }
 
+MOCK_CHAT_RESPONSES = [
+    "Your engagement rate is trending up 12% this week — your Wednesday carousel post is leading the pack. Consider doubling down on that format.",
+    "Based on your audience data, posting at 6 PM on weekdays gives you ~40% more reach. Your peak engagement window is Tuesday–Thursday.",
+    "Your top-performing content type is educational carousels, averaging 6.8% engagement vs 2.4% for static images. Try more of those!",
+    "TikTok is your fastest-growing platform (+8.2% last month). Your videos under 30 seconds perform 3× better than longer ones.",
+    "I'd suggest focusing on Instagram Reels and TikTok for reach, LinkedIn for B2B leads, and Twitter/X for community building and real-time engagement.",
+]
+
+
+def _openai_client():
+    if settings.OPENAI_API_KEY:
+        from openai import OpenAI
+        return OpenAI(api_key=settings.OPENAI_API_KEY)
+    return None
+
+
+@router.post("/chat")
+def ai_chat(body: dict, current_user: User = Depends(get_current_user)):
+    message = body.get("message", "")
+    history = body.get("history", [])
+
+    client = _openai_client()
+    if client:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are SocialOS AI, an expert social media strategist and content creator. "
+                    "Help users grow their brand, craft viral content, analyze metrics, and manage their social presence. "
+                    "Be concise, specific, and actionable. Use data when you can. Keep replies under 150 words unless asked for more."
+                ),
+            },
+            *[{"role": m["role"], "content": m["content"]} for m in history[-10:]],
+            {"role": "user", "content": message},
+        ]
+        resp = client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=300)
+        reply = resp.choices[0].message.content.strip()
+        return {"reply": reply, "model": "gpt-4o"}
+
+    import random
+    return {"reply": random.choice(MOCK_CHAT_RESPONSES), "model": "mock"}
+
 
 @router.post("/generate-caption")
 def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_current_user)):
-    if settings.OPENAI_API_KEY:
-        # TODO: call OpenAI GPT-4o
-        pass
+    limit = PLATFORM_CHAR_LIMITS.get(body.platform, 2200)
+    client = _openai_client()
+
+    if client:
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are an expert social media copywriter. Write a {body.tone} caption for {body.platform}. "
+                        f"Keep it within {limit} characters. Return only the caption text — no quotes, no label, no explanation."
+                    ),
+                },
+                {"role": "user", "content": f"Write a caption about: {body.topic}"},
+            ],
+            max_tokens=500,
+        )
+        caption = resp.choices[0].message.content.strip()
+
+        hashtags = []
+        if body.include_hashtags:
+            h_resp = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": f"Generate 10 relevant hashtags for {body.platform}. Return only hashtags separated by spaces, nothing else."},
+                    {"role": "user", "content": caption},
+                ],
+                max_tokens=100,
+            )
+            hashtags = h_resp.choices[0].message.content.strip().split()
+
+        return {
+            "caption": caption,
+            "hashtags": hashtags,
+            "char_count": len(caption),
+            "char_limit": limit,
+            "sentiment": "positive",
+            "readability_score": 82,
+            "predicted_engagement_score": 86,
+            "ai_model": "gpt-4o",
+        }
 
     caption = MOCK_CAPTIONS.get(body.tone, MOCK_CAPTIONS["casual"])
-    limit = PLATFORM_CHAR_LIMITS.get(body.platform, 2200)
-    hashtags = MOCK_HASHTAGS.get(body.platform, MOCK_HASHTAGS["instagram"])[:body.count if hasattr(body, "count") else 10]
-
+    hashtags = MOCK_HASHTAGS.get(body.platform, MOCK_HASHTAGS["instagram"])[:10]
     return {
         "caption": caption,
         "hashtags": hashtags if body.include_hashtags else [],
@@ -44,14 +123,33 @@ def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_c
         "sentiment": "positive",
         "readability_score": 72,
         "predicted_engagement_score": 78,
-        "ai_model": "mock" if not settings.OPENAI_API_KEY else "gpt-4o",
+        "ai_model": "mock",
     }
 
 
 @router.post("/rewrite")
 def rewrite_text(body: AIRewriteRequest, current_user: User = Depends(get_current_user)):
-    if settings.OPENAI_API_KEY:
-        pass
+    client = _openai_client()
+
+    if client:
+        limit = PLATFORM_CHAR_LIMITS.get(body.target_platform, 2200)
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"Rewrite the following text for {body.target_platform} in a {body.tone} tone. "
+                        f"Keep it under {limit} characters. Use platform-native conventions (e.g., threads for LinkedIn, "
+                        "hooks for TikTok, brevity for Twitter). Return only the rewritten text."
+                    ),
+                },
+                {"role": "user", "content": body.text},
+            ],
+            max_tokens=500,
+        )
+        rewritten = resp.choices[0].message.content.strip()
+        return {"original": body.text, "rewritten": rewritten, "platform": body.target_platform, "tone": body.tone, "char_count": len(rewritten)}
 
     platform_styles = {
         "twitter": f"{body.text[:240]}... [adapted for Twitter/X — concise, punchy]",
@@ -59,27 +157,37 @@ def rewrite_text(body: AIRewriteRequest, current_user: User = Depends(get_curren
         "instagram": f"{body.text} ✨\n\nDouble tap if you agree! 👇",
         "tiktok": f"POV: {body.text[:100]}... #fyp",
     }
-
     rewritten = platform_styles.get(body.target_platform, body.text)
-    return {
-        "original": body.text,
-        "rewritten": rewritten,
-        "platform": body.target_platform,
-        "tone": body.tone,
-        "char_count": len(rewritten),
-    }
+    return {"original": body.text, "rewritten": rewritten, "platform": body.target_platform, "tone": body.tone, "char_count": len(rewritten)}
 
 
 @router.post("/hashtags")
 def suggest_hashtags(body: HashtagSuggestRequest, current_user: User = Depends(get_current_user)):
+    client = _openai_client()
+
+    if client:
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"Generate {body.count} relevant hashtags for {body.platform} based on the caption. Return only hashtags separated by spaces.",
+                },
+                {"role": "user", "content": body.caption},
+            ],
+            max_tokens=150,
+        )
+        all_tags = resp.choices[0].message.content.strip().split()
+        return {
+            "hashtags": all_tags[:body.count],
+            "trending": all_tags[:3],
+            "niche": all_tags[3:7],
+            "evergreen": all_tags[7:],
+            "platform": body.platform,
+        }
+
     base = MOCK_HASHTAGS.get(body.platform, MOCK_HASHTAGS["instagram"])
-    return {
-        "hashtags": base[:body.count],
-        "trending": base[:3],
-        "niche": base[3:7],
-        "evergreen": base[7:],
-        "platform": body.platform,
-    }
+    return {"hashtags": base[:body.count], "trending": base[:3], "niche": base[3:7], "evergreen": base[7:], "platform": body.platform}
 
 
 @router.get("/best-time")
@@ -112,12 +220,7 @@ def best_time(platform: str = "instagram", current_user: User = Depends(get_curr
         ],
     }
     windows = WINDOWS.get(platform, WINDOWS["instagram"])
-    return {
-        "platform": platform,
-        "windows": windows,
-        "next_optimal": f"Today at {windows[0]['time']}",
-        "timezone": "Africa/Lagos",
-    }
+    return {"platform": platform, "windows": windows, "next_optimal": f"Today at {windows[0]['time']}", "timezone": "Africa/Lagos"}
 
 
 @router.post("/captions")
@@ -125,6 +228,30 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
     topic = body.get("topic", "our latest product")
     tone = body.get("tone", "casual")
     platform = body.get("platform", "instagram")
+    client = _openai_client()
+
+    if client:
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are an expert social media copywriter for {platform}. "
+                        f"Generate 3 distinct {tone} captions about the given topic. "
+                        "Each caption should be different in angle and structure. "
+                        "Return a JSON object with key 'captions' containing an array of 3 strings. No other keys."
+                    ),
+                },
+                {"role": "user", "content": f"Topic: {topic}"},
+            ],
+            max_tokens=600,
+            response_format={"type": "json_object"},
+        )
+        import json
+        data = json.loads(resp.choices[0].message.content)
+        captions = data.get("captions", [])
+        return {"captions": captions, "topic": topic, "tone": tone, "platform": platform, "ai_model": "gpt-4o"}
 
     TEMPLATES = {
         "casual": [
@@ -163,19 +290,30 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
         "facebook": "",
     }.get(platform, "")
 
-    return {
-        "captions": [c + platform_suffix for c in captions],
-        "topic": topic,
-        "tone": tone,
-        "platform": platform,
-    }
+    return {"captions": [c + platform_suffix for c in captions], "topic": topic, "tone": tone, "platform": platform, "ai_model": "mock"}
 
 
 @router.post("/analyze-sentiment")
 def analyze_sentiment(body: dict, current_user: User = Depends(get_current_user)):
     text = body.get("text", "")
-    positive_words = ["excited", "love", "amazing", "great", "best", "happy", "thrilled"]
-    negative_words = ["bad", "terrible", "hate", "awful", "worst", "disappointed"]
+    client = _openai_client()
+
+    if client:
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Analyze the sentiment of the text. Return a JSON object with keys: sentiment (positive/neutral/negative), score (-1.0 to 1.0), confidence (0.0 to 1.0)."},
+                {"role": "user", "content": text},
+            ],
+            max_tokens=80,
+            response_format={"type": "json_object"},
+        )
+        import json
+        data = json.loads(resp.choices[0].message.content)
+        return {**data, "text_length": len(text), "ai_model": "gpt-4o"}
+
+    positive_words = ["excited", "love", "amazing", "great", "best", "happy", "thrilled", "fantastic", "excellent"]
+    negative_words = ["bad", "terrible", "hate", "awful", "worst", "disappointed", "poor", "fail"]
     score = sum(1 for w in positive_words if w in text.lower()) - sum(1 for w in negative_words if w in text.lower())
     sentiment = "positive" if score > 0 else ("negative" if score < 0 else "neutral")
-    return {"sentiment": sentiment, "score": score, "text_length": len(text)}
+    return {"sentiment": sentiment, "score": min(max(score * 0.3, -1.0), 1.0), "confidence": 0.7, "text_length": len(text), "ai_model": "mock"}

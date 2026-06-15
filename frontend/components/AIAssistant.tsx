@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { Sparkles, X, Send, Loader2, RefreshCw } from "lucide-react";
-import { analyticsApi, aiApi } from "@/lib/api";
+import { aiApi } from "@/lib/api";
 import { useUIStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +25,7 @@ export default function AIAssistant() {
       id: "welcome",
       role: "assistant",
       content:
-        "Hi! I'm your AI social media analyst. Ask me about your performance, or say \"generate a caption\" to create content.",
+        "Hi! I'm your AI social media strategist. Ask me anything — analytics, caption ideas, posting strategy, growth tips.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -45,50 +45,18 @@ export default function AIAssistant() {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
-    setMessages((prev) => [
-      ...prev,
-      { id: `u-${Date.now()}`, role: "user", content: trimmed },
-    ]);
+    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", content: trimmed };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setInput("");
     setLoading(true);
 
     try {
-      let response = "";
-
-      const lower = trimmed.toLowerCase();
-      if (
-        lower.includes("caption") ||
-        lower.includes("generate") ||
-        lower.includes("write a post") ||
-        lower.includes("create content")
-      ) {
-        const topic =
-          trimmed
-            .replace(/generate|write|create|a post|content|caption|for|about|an?/gi, "")
-            .trim() || "our latest update";
-        const data = await aiApi.generateCaption({
-          topic,
-          platform: "instagram",
-          tone: "casual",
-          include_hashtags: true,
-          keywords: [],
-        });
-        response = `Here's a caption:\n\n"${data.caption}"\n\n${data.hashtags?.join(" ")}\n\n✦ Predicted engagement: ${data.predicted_engagement_score}/100`;
-      } else if (lower.includes("hashtag")) {
-        const data = await aiApi.hashtags({
-          caption: trimmed,
-          platform: "instagram",
-          count: 10,
-        });
-        response = `Suggested hashtags:\n\n${data.hashtags?.join(" ")}\n\nTrending: ${data.trending?.join(" ")}`;
-      } else {
-        const data = await analyticsApi.ask(trimmed);
-        response = data.answer;
-      }
-
+      const history = nextMessages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      const data = await aiApi.chat(trimmed, history);
       setMessages((prev) => [
         ...prev,
-        { id: `a-${Date.now()}`, role: "assistant", content: response },
+        { id: `a-${Date.now()}`, role: "assistant", content: data.reply },
       ]);
     } catch {
       setMessages((prev) => [
@@ -114,26 +82,25 @@ export default function AIAssistant() {
       />
 
       <div className="fixed right-0 top-0 h-full w-[380px] bg-slate-900 border-l border-slate-800 flex flex-col z-50 shadow-2xl animate-slide-in-right">
-        {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 shrink-0">
           <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center shrink-0">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-white">AI Assistant</p>
-            <p className="text-xs text-slate-400">Analytics &amp; content copilot</p>
+            <p className="text-xs text-slate-400">Powered by GPT-4o</p>
           </div>
           <button
-            onClick={() => {
+            onClick={() =>
               setMessages([
                 {
                   id: "welcome",
                   role: "assistant",
                   content:
-                    "Hi! I'm your AI social media analyst. Ask me about your performance, or say \"generate a caption\" to create content.",
+                    "Hi! I'm your AI social media strategist. Ask me anything — analytics, caption ideas, posting strategy, growth tips.",
                 },
-              ]);
-            }}
+              ])
+            }
             className="text-slate-600 hover:text-slate-400 transition-colors p-1"
             title="Clear conversation"
           >
@@ -147,7 +114,6 @@ export default function AIAssistant() {
           </button>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {messages.map((msg) => (
             <div
@@ -194,7 +160,6 @@ export default function AIAssistant() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Quick prompts — only when conversation is fresh */}
         {messages.length <= 1 && !loading && (
           <div className="px-4 pb-3 flex flex-wrap gap-1.5 shrink-0">
             {QUICK_PROMPTS.map((p) => (
@@ -209,13 +174,12 @@ export default function AIAssistant() {
           </div>
         )}
 
-        {/* Input */}
         <div className="p-4 border-t border-slate-800 shrink-0">
           <div className="flex gap-2">
             <input
               ref={inputRef}
               className="input flex-1 text-sm"
-              placeholder="Ask about analytics or generate content…"
+              placeholder="Ask anything about your social strategy…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {

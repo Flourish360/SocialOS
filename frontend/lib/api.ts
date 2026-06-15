@@ -63,6 +63,14 @@ export const aiApi = {
   sentiment: (text: string) => api.post("/ai/analyze-sentiment", { text }).then((r) => r.data),
   bestTime: (platform: string) => api.get(`/ai/best-time?platform=${platform}`).then((r) => r.data),
   captions: (body: Record<string, unknown>) => api.post("/ai/captions", body).then((r) => r.data),
+  chat: (message: string, history: { role: string; content: string }[]) =>
+    api.post("/ai/chat", { message, history }).then((r) => r.data),
+};
+
+export const mediaApi = {
+  getUploadUrl: (filename: string, content_type: string) =>
+    api.post("/media/upload-url", { filename, content_type }).then((r) => r.data),
+  delete: (key: string) => api.delete(`/media/${key}`).then((r) => r.data),
 };
 
 export const automationApi = {
