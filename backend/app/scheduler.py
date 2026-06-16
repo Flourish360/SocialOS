@@ -34,5 +34,5 @@ def _publish_due_posts():
         db.close()
 
 
-scheduler = BackgroundScheduler(timezone="UTC")
+scheduler = BackgroundScheduler()
 scheduler.add_job(_publish_due_posts, "interval", minutes=1, id="publish_scheduled_posts")

@@ -8,7 +8,11 @@ from .db.database import engine, Base
 from .models import user, social_account, post  # ensure models are registered
 from .scheduler import scheduler
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).error("DB table creation failed: %s", e)
 
 
 @asynccontextmanager
