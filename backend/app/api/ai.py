@@ -26,29 +26,39 @@ MOCK_HASHTAGS = {
 }
 
 MOCK_CHAT_RESPONSES = [
-    "Your engagement rate is trending up 12% this week — your Wednesday carousel post is leading the pack. Consider doubling down on that format.",
-    "Based on your audience data, posting at 6 PM on weekdays gives you ~40% more reach. Your peak engagement window is Tuesday–Thursday.",
+    "Your engagement rate is trending up 12% this week - your Wednesday carousel post is leading the pack. Consider doubling down on that format.",
+    "Based on your audience data, posting at 6 PM on weekdays gives you ~40% more reach. Your peak engagement window is Tuesday-Thursday.",
     "Your top-performing content type is educational carousels, averaging 6.8% engagement vs 2.4% for static images. Try more of those!",
-    "TikTok is your fastest-growing platform (+8.2% last month). Your videos under 30 seconds perform 3× better than longer ones.",
+    "TikTok is your fastest-growing platform (+8.2% last month). Your videos under 30 seconds perform 3x better than longer ones.",
     "I'd suggest focusing on Instagram Reels and TikTok for reach, LinkedIn for B2B leads, and Twitter/X for community building and real-time engagement.",
 ]
 
+MODEL = "claude-opus-4-8"
 
-def _openai_client():
-    if settings.OPENAI_API_KEY:
-        from openai import OpenAI
-        return OpenAI(api_key=settings.OPENAI_API_KEY)
+
+def _claude_client():
+    if settings.ANTHROPIC_API_KEY:
+        import anthropic
+        return anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     return None
 
 
-def _safe_openai_call(fn):
-    """Run an OpenAI API call, returning None on any error so callers fall back to mock."""
+def _safe_claude_call(fn):
+    """Run a Claude API call, returning None on any error so callers fall back to mock."""
     try:
         return fn()
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning("OpenAI call failed: %s", e)
+        logging.getLogger(__name__).warning("Claude API call failed: %s", e)
         return None
+
+
+def _text(response) -> str:
+    """Extract text content from a Claude message response."""
+    for block in response.content:
+        if block.type == "text":
+            return block.text.strip()
+    return ""
 
 
 @router.post("/chat")
@@ -56,23 +66,24 @@ def ai_chat(body: dict, current_user: User = Depends(get_current_user)):
     message = body.get("message", "")
     history = body.get("history", [])
 
-    client = _openai_client()
+    client = _claude_client()
     if client:
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are SocialOS AI, an expert social media strategist and content creator. "
-                    "Help users grow their brand, craft viral content, analyze metrics, and manage their social presence. "
-                    "Be concise, specific, and actionable. Use data when you can. Keep replies under 150 words unless asked for more."
-                ),
-            },
             *[{"role": m["role"], "content": m["content"]} for m in history[-10:]],
             {"role": "user", "content": message},
         ]
-        resp = _safe_openai_call(lambda: client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=300))
+        resp = _safe_claude_call(lambda: client.messages.create(
+            model=MODEL,
+            max_tokens=300,
+            system=(
+                "You are SocialOS AI, an expert social media strategist and content creator. "
+                "Help users grow their brand, craft viral content, analyze metrics, and manage their social presence. "
+                "Be concise, specific, and actionable. Use data when you can. Keep replies under 150 words unless asked for more."
+            ),
+            messages=messages,
+        ))
         if resp:
-            return {"reply": resp.choices[0].message.content.strip(), "model": "gpt-4o"}
+            return {"reply": _text(resp), "model": MODEL}
 
     import random
     return {"reply": random.choice(MOCK_CHAT_RESPONSES), "model": "mock"}
@@ -81,36 +92,29 @@ def ai_chat(body: dict, current_user: User = Depends(get_current_user)):
 @router.post("/generate-caption")
 def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_current_user)):
     limit = PLATFORM_CHAR_LIMITS.get(body.platform, 2200)
-    client = _openai_client()
+    client = _claude_client()
 
     if client:
-        resp = _safe_openai_call(lambda: client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        f"You are an expert social media copywriter. Write a {body.tone} caption for {body.platform}. "
-                        f"Keep it within {limit} characters. Return only the caption text — no quotes, no label, no explanation."
-                    ),
-                },
-                {"role": "user", "content": f"Write a caption about: {body.topic}"},
-            ],
+        resp = _safe_claude_call(lambda: client.messages.create(
+            model=MODEL,
             max_tokens=500,
+            system=(
+                f"You are an expert social media copywriter. Write a {body.tone} caption for {body.platform}. "
+                f"Keep it within {limit} characters. Return only the caption text - no quotes, no label, no explanation."
+            ),
+            messages=[{"role": "user", "content": f"Write a caption about: {body.topic}"}],
         ))
         if resp:
-            caption = resp.choices[0].message.content.strip()
+            caption = _text(resp)
             hashtags = []
             if body.include_hashtags:
-                h_resp = _safe_openai_call(lambda: client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": f"Generate 10 relevant hashtags for {body.platform}. Return only hashtags separated by spaces, nothing else."},
-                        {"role": "user", "content": caption},
-                    ],
+                h_resp = _safe_claude_call(lambda: client.messages.create(
+                    model=MODEL,
                     max_tokens=100,
+                    system=f"Generate 10 relevant hashtags for {body.platform}. Return only hashtags separated by spaces, nothing else.",
+                    messages=[{"role": "user", "content": caption}],
                 ))
-                hashtags = h_resp.choices[0].message.content.strip().split() if h_resp else []
+                hashtags = _text(h_resp).split() if h_resp else []
             return {
                 "caption": caption,
                 "hashtags": hashtags,
@@ -119,7 +123,7 @@ def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_c
                 "sentiment": "positive",
                 "readability_score": 82,
                 "predicted_engagement_score": 86,
-                "ai_model": "gpt-4o",
+                "ai_model": MODEL,
             }
 
     caption = MOCK_CAPTIONS.get(body.tone, MOCK_CAPTIONS["casual"])
@@ -138,31 +142,26 @@ def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_c
 
 @router.post("/rewrite")
 def rewrite_text(body: AIRewriteRequest, current_user: User = Depends(get_current_user)):
-    client = _openai_client()
+    client = _claude_client()
 
     if client:
         limit = PLATFORM_CHAR_LIMITS.get(body.target_platform, 2200)
-        resp = _safe_openai_call(lambda: client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        f"Rewrite the following text for {body.target_platform} in a {body.tone} tone. "
-                        f"Keep it under {limit} characters. Use platform-native conventions (e.g., threads for LinkedIn, "
-                        "hooks for TikTok, brevity for Twitter). Return only the rewritten text."
-                    ),
-                },
-                {"role": "user", "content": body.text},
-            ],
+        resp = _safe_claude_call(lambda: client.messages.create(
+            model=MODEL,
             max_tokens=500,
+            system=(
+                f"Rewrite the following text for {body.target_platform} in a {body.tone} tone. "
+                f"Keep it under {limit} characters. Use platform-native conventions (e.g., threads for LinkedIn, "
+                "hooks for TikTok, brevity for Twitter). Return only the rewritten text."
+            ),
+            messages=[{"role": "user", "content": body.text}],
         ))
         if resp:
-            rewritten = resp.choices[0].message.content.strip()
+            rewritten = _text(resp)
             return {"original": body.text, "rewritten": rewritten, "platform": body.target_platform, "tone": body.tone, "char_count": len(rewritten)}
 
     platform_styles = {
-        "twitter": f"{body.text[:240]}... [adapted for Twitter/X — concise, punchy]",
+        "twitter": f"{body.text[:240]}... [adapted for Twitter/X - concise, punchy]",
         "linkedin": f"I've been thinking about this a lot lately.\n\n{body.text}\n\nWhat's your take? Let me know in the comments 👇",
         "instagram": f"{body.text} ✨\n\nDouble tap if you agree! 👇",
         "tiktok": f"POV: {body.text[:100]}... #fyp",
@@ -173,22 +172,17 @@ def rewrite_text(body: AIRewriteRequest, current_user: User = Depends(get_curren
 
 @router.post("/hashtags")
 def suggest_hashtags(body: HashtagSuggestRequest, current_user: User = Depends(get_current_user)):
-    client = _openai_client()
+    client = _claude_client()
 
     if client:
-        resp = _safe_openai_call(lambda: client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"Generate {body.count} relevant hashtags for {body.platform} based on the caption. Return only hashtags separated by spaces.",
-                },
-                {"role": "user", "content": body.caption},
-            ],
+        resp = _safe_claude_call(lambda: client.messages.create(
+            model=MODEL,
             max_tokens=150,
+            system=f"Generate {body.count} relevant hashtags for {body.platform} based on the caption. Return only hashtags separated by spaces.",
+            messages=[{"role": "user", "content": body.caption}],
         ))
         if resp:
-            all_tags = resp.choices[0].message.content.strip().split()
+            all_tags = _text(resp).split()
             return {
                 "hashtags": all_tags[:body.count],
                 "trending": all_tags[:3],
@@ -239,42 +233,45 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
     topic = body.get("topic", "our latest product")
     tone = body.get("tone", "casual")
     platform = body.get("platform", "instagram")
-    client = _openai_client()
+    client = _claude_client()
 
     if client:
-        resp = _safe_openai_call(lambda: client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        f"You are an expert social media copywriter for {platform}. "
-                        f"Generate 3 distinct {tone} captions about the given topic. "
-                        "Each caption should be different in angle and structure. "
-                        "Return a JSON object with key 'captions' containing an array of 3 strings. No other keys."
-                    ),
-                },
-                {"role": "user", "content": f"Topic: {topic}"},
-            ],
+        resp = _safe_claude_call(lambda: client.messages.create(
+            model=MODEL,
             max_tokens=600,
-            response_format={"type": "json_object"},
+            system=(
+                f"You are an expert social media copywriter for {platform}. "
+                f"Generate 3 distinct {tone} captions about the given topic. "
+                "Each caption should be different in angle and structure. "
+                'Return a JSON object with key "captions" containing an array of 3 strings. No other keys.'
+            ),
+            messages=[{"role": "user", "content": f"Topic: {topic}"}],
         ))
         if resp:
             import json
-            data = json.loads(resp.choices[0].message.content)
-            captions = data.get("captions", [])
-            return {"captions": captions, "topic": topic, "tone": tone, "platform": platform, "ai_model": "gpt-4o"}
+            try:
+                text = _text(resp)
+                # Strip markdown code fences if present
+                if text.startswith("```"):
+                    text = text.split("```")[1]
+                    if text.startswith("json"):
+                        text = text[4:]
+                data = json.loads(text.strip())
+                captions = data.get("captions", [])
+                return {"captions": captions, "topic": topic, "tone": tone, "platform": platform, "ai_model": MODEL}
+            except Exception:
+                pass
 
     TEMPLATES = {
         "casual": [
             f"Okay so {topic} is literally changing the game and I can't stop thinking about it 🔥 Drop a comment if you're feeling this too!",
-            f"Not gonna lie — {topic} just became my new obsession 👀 Who else?? Repost if you agree!",
+            f"Not gonna lie - {topic} just became my new obsession 👀 Who else?? Repost if you agree!",
             f"We need to talk about {topic} because nobody is talking about this enough fr fr 🙌",
         ],
         "professional": [
-            f"Excited to share our latest insights on {topic}. This is reshaping how we approach growth — read more in the link below.",
+            f"Excited to share our latest insights on {topic}. This is reshaping how we approach growth - read more in the link below.",
             f"At its core, {topic} is about creating real value. Here's how we're thinking about it and what it means for the industry.",
-            f"We've spent months researching {topic}. The findings are clear: teams that embrace this see 3× faster results.",
+            f"We've spent months researching {topic}. The findings are clear: teams that embrace this see 3x faster results.",
         ],
         "funny": [
             f"Me explaining {topic} to my team at 9 AM on a Monday: 👉 [insert chaos] 😅 But honestly? Worth it.",
@@ -284,11 +281,11 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
         "inspirational": [
             f"Every big journey starts with a single step. For us, that step was {topic}. What's yours? ✨",
             f"The world changes when people stop waiting and start doing. {topic} is our way of doing. What's yours?",
-            f"We didn't set out to be different. We set out to be better. That's what {topic} means to us — and it starts today. 🚀",
+            f"We didn't set out to be different. We set out to be better. That's what {topic} means to us - and it starts today. 🚀",
         ],
         "educational": [
             f"Did you know? {topic} can increase your results by up to 40%. Here's the 3-step framework we use 🧵 [Thread]",
-            f"Most people get {topic} wrong. Here's what the data actually shows — and how to use it to your advantage.",
+            f"Most people get {topic} wrong. Here's what the data actually shows - and how to use it to your advantage.",
             f"Breaking down {topic} so it actually makes sense: Step 1: understand the basics. Step 2: apply consistently. Step 3: measure and iterate. Save this!",
         ],
     }
@@ -308,22 +305,27 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
 @router.post("/analyze-sentiment")
 def analyze_sentiment(body: dict, current_user: User = Depends(get_current_user)):
     text = body.get("text", "")
-    client = _openai_client()
+    client = _claude_client()
 
     if client:
-        resp = _safe_openai_call(lambda: client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Analyze the sentiment of the text. Return a JSON object with keys: sentiment (positive/neutral/negative), score (-1.0 to 1.0), confidence (0.0 to 1.0)."},
-                {"role": "user", "content": text},
-            ],
+        resp = _safe_claude_call(lambda: client.messages.create(
+            model=MODEL,
             max_tokens=80,
-            response_format={"type": "json_object"},
+            system='Analyze the sentiment of the text. Return a JSON object with keys: sentiment (positive/neutral/negative), score (-1.0 to 1.0), confidence (0.0 to 1.0). Return only the JSON, no explanation.',
+            messages=[{"role": "user", "content": text}],
         ))
         if resp:
             import json
-            data = json.loads(resp.choices[0].message.content)
-            return {**data, "text_length": len(text), "ai_model": "gpt-4o"}
+            try:
+                raw = _text(resp)
+                if raw.startswith("```"):
+                    raw = raw.split("```")[1]
+                    if raw.startswith("json"):
+                        raw = raw[4:]
+                data = json.loads(raw.strip())
+                return {**data, "text_length": len(text), "ai_model": MODEL}
+            except Exception:
+                pass
 
     positive_words = ["excited", "love", "amazing", "great", "best", "happy", "thrilled", "fantastic", "excellent"]
     negative_words = ["bad", "terrible", "hate", "awful", "worst", "disappointed", "poor", "fail"]

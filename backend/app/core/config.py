@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./social_platform.db"
     REDIS_URL: str = "redis://localhost:6379"
 
-    OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
 
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
