@@ -31,9 +31,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Normalize configured origin (a trailing slash never matches the browser's Origin header).
+_frontend_origin = settings.FRONTEND_URL.rstrip("/")
+_allowed_origins = [_frontend_origin, "http://localhost:3000", "http://localhost:3001"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3000"],
+    allow_origins=_allowed_origins,
+    # Also accept any Vercel deployment (production + preview URLs) for this project.
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
