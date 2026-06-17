@@ -41,6 +41,16 @@ def _openai_client():
     return None
 
 
+def _safe_openai_call(fn):
+    """Run an OpenAI API call, returning None on any error so callers fall back to mock."""
+    try:
+        return fn()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("OpenAI call failed: %s", e)
+        return None
+
+
 @router.post("/chat")
 def ai_chat(body: dict, current_user: User = Depends(get_current_user)):
     message = body.get("message", "")
@@ -60,9 +70,9 @@ def ai_chat(body: dict, current_user: User = Depends(get_current_user)):
             *[{"role": m["role"], "content": m["content"]} for m in history[-10:]],
             {"role": "user", "content": message},
         ]
-        resp = client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=300)
-        reply = resp.choices[0].message.content.strip()
-        return {"reply": reply, "model": "gpt-4o"}
+        resp = _safe_openai_call(lambda: client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=300))
+        if resp:
+            return {"reply": resp.choices[0].message.content.strip(), "model": "gpt-4o"}
 
     import random
     return {"reply": random.choice(MOCK_CHAT_RESPONSES), "model": "mock"}
@@ -74,7 +84,7 @@ def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_c
     client = _openai_client()
 
     if client:
-        resp = client.chat.completions.create(
+        resp = _safe_openai_call(lambda: client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
@@ -87,31 +97,30 @@ def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_c
                 {"role": "user", "content": f"Write a caption about: {body.topic}"},
             ],
             max_tokens=500,
-        )
-        caption = resp.choices[0].message.content.strip()
-
-        hashtags = []
-        if body.include_hashtags:
-            h_resp = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": f"Generate 10 relevant hashtags for {body.platform}. Return only hashtags separated by spaces, nothing else."},
-                    {"role": "user", "content": caption},
-                ],
-                max_tokens=100,
-            )
-            hashtags = h_resp.choices[0].message.content.strip().split()
-
-        return {
-            "caption": caption,
-            "hashtags": hashtags,
-            "char_count": len(caption),
-            "char_limit": limit,
-            "sentiment": "positive",
-            "readability_score": 82,
-            "predicted_engagement_score": 86,
-            "ai_model": "gpt-4o",
-        }
+        ))
+        if resp:
+            caption = resp.choices[0].message.content.strip()
+            hashtags = []
+            if body.include_hashtags:
+                h_resp = _safe_openai_call(lambda: client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": f"Generate 10 relevant hashtags for {body.platform}. Return only hashtags separated by spaces, nothing else."},
+                        {"role": "user", "content": caption},
+                    ],
+                    max_tokens=100,
+                ))
+                hashtags = h_resp.choices[0].message.content.strip().split() if h_resp else []
+            return {
+                "caption": caption,
+                "hashtags": hashtags,
+                "char_count": len(caption),
+                "char_limit": limit,
+                "sentiment": "positive",
+                "readability_score": 82,
+                "predicted_engagement_score": 86,
+                "ai_model": "gpt-4o",
+            }
 
     caption = MOCK_CAPTIONS.get(body.tone, MOCK_CAPTIONS["casual"])
     hashtags = MOCK_HASHTAGS.get(body.platform, MOCK_HASHTAGS["instagram"])[:10]
@@ -133,7 +142,7 @@ def rewrite_text(body: AIRewriteRequest, current_user: User = Depends(get_curren
 
     if client:
         limit = PLATFORM_CHAR_LIMITS.get(body.target_platform, 2200)
-        resp = client.chat.completions.create(
+        resp = _safe_openai_call(lambda: client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
@@ -147,9 +156,10 @@ def rewrite_text(body: AIRewriteRequest, current_user: User = Depends(get_curren
                 {"role": "user", "content": body.text},
             ],
             max_tokens=500,
-        )
-        rewritten = resp.choices[0].message.content.strip()
-        return {"original": body.text, "rewritten": rewritten, "platform": body.target_platform, "tone": body.tone, "char_count": len(rewritten)}
+        ))
+        if resp:
+            rewritten = resp.choices[0].message.content.strip()
+            return {"original": body.text, "rewritten": rewritten, "platform": body.target_platform, "tone": body.tone, "char_count": len(rewritten)}
 
     platform_styles = {
         "twitter": f"{body.text[:240]}... [adapted for Twitter/X — concise, punchy]",
@@ -166,7 +176,7 @@ def suggest_hashtags(body: HashtagSuggestRequest, current_user: User = Depends(g
     client = _openai_client()
 
     if client:
-        resp = client.chat.completions.create(
+        resp = _safe_openai_call(lambda: client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
@@ -176,15 +186,16 @@ def suggest_hashtags(body: HashtagSuggestRequest, current_user: User = Depends(g
                 {"role": "user", "content": body.caption},
             ],
             max_tokens=150,
-        )
-        all_tags = resp.choices[0].message.content.strip().split()
-        return {
-            "hashtags": all_tags[:body.count],
-            "trending": all_tags[:3],
-            "niche": all_tags[3:7],
-            "evergreen": all_tags[7:],
-            "platform": body.platform,
-        }
+        ))
+        if resp:
+            all_tags = resp.choices[0].message.content.strip().split()
+            return {
+                "hashtags": all_tags[:body.count],
+                "trending": all_tags[:3],
+                "niche": all_tags[3:7],
+                "evergreen": all_tags[7:],
+                "platform": body.platform,
+            }
 
     base = MOCK_HASHTAGS.get(body.platform, MOCK_HASHTAGS["instagram"])
     return {"hashtags": base[:body.count], "trending": base[:3], "niche": base[3:7], "evergreen": base[7:], "platform": body.platform}
@@ -231,7 +242,7 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
     client = _openai_client()
 
     if client:
-        resp = client.chat.completions.create(
+        resp = _safe_openai_call(lambda: client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
@@ -247,11 +258,12 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
             ],
             max_tokens=600,
             response_format={"type": "json_object"},
-        )
-        import json
-        data = json.loads(resp.choices[0].message.content)
-        captions = data.get("captions", [])
-        return {"captions": captions, "topic": topic, "tone": tone, "platform": platform, "ai_model": "gpt-4o"}
+        ))
+        if resp:
+            import json
+            data = json.loads(resp.choices[0].message.content)
+            captions = data.get("captions", [])
+            return {"captions": captions, "topic": topic, "tone": tone, "platform": platform, "ai_model": "gpt-4o"}
 
     TEMPLATES = {
         "casual": [
@@ -299,7 +311,7 @@ def analyze_sentiment(body: dict, current_user: User = Depends(get_current_user)
     client = _openai_client()
 
     if client:
-        resp = client.chat.completions.create(
+        resp = _safe_openai_call(lambda: client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "Analyze the sentiment of the text. Return a JSON object with keys: sentiment (positive/neutral/negative), score (-1.0 to 1.0), confidence (0.0 to 1.0)."},
@@ -307,10 +319,11 @@ def analyze_sentiment(body: dict, current_user: User = Depends(get_current_user)
             ],
             max_tokens=80,
             response_format={"type": "json_object"},
-        )
-        import json
-        data = json.loads(resp.choices[0].message.content)
-        return {**data, "text_length": len(text), "ai_model": "gpt-4o"}
+        ))
+        if resp:
+            import json
+            data = json.loads(resp.choices[0].message.content)
+            return {**data, "text_length": len(text), "ai_model": "gpt-4o"}
 
     positive_words = ["excited", "love", "amazing", "great", "best", "happy", "thrilled", "fantastic", "excellent"]
     negative_words = ["bad", "terrible", "hate", "awful", "worst", "disappointed", "poor", "fail"]
