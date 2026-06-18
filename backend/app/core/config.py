@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     META_APP_ID: Optional[str] = None
     META_APP_SECRET: Optional[str] = None
+    INSTAGRAM_CLIENT_ID: Optional[str] = None
+    INSTAGRAM_CLIENT_SECRET: Optional[str] = None
     TWITTER_CLIENT_ID: Optional[str] = None
     TWITTER_CLIENT_SECRET: Optional[str] = None
     LINKEDIN_CLIENT_ID: Optional[str] = None
