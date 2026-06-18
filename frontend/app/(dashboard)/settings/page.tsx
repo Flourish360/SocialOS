@@ -157,7 +157,7 @@ function SecuritySection() {
         <h3 className="text-sm font-semibold text-white mb-3">Active sessions</h3>
         <div className="space-y-2">
           {[
-            { device: "Chrome on Windows — Current", location: "Lagos, NG", time: "Now", current: true },
+            { device: "Chrome on Windows - Current", location: "Lagos, NG", time: "Now", current: true },
             { device: "Safari on iPhone", location: "Lagos, NG", time: "2h ago", current: false },
           ].map((s) => (
             <div key={s.device} className="flex items-center justify-between p-3 bg-slate-800/50 border border-slate-700 rounded-xl">
@@ -249,11 +249,10 @@ export default function SettingsPage() {
 
   const connectPlatform = async (platform: string) => {
     try {
-      await accountsApi.oauthUrl(platform);
-      setConnectedPlatforms((prev) => [...prev, platform]);
-      toast.success(`${platform} connected!`);
+      const { url } = await accountsApi.oauthUrl(platform);
+      window.location.href = url;
     } catch {
-      toast.error("OAuth failed — add real credentials in .env");
+      toast.error("OAuth not configured for this platform yet");
     }
   };
 

@@ -1,6 +1,5 @@
 import axios from "axios";
 
-// Defaults to same-origin /api (proxied to FastAPI via next.config.mjs rewrites)
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 const api = axios.create({ baseURL: API_BASE });
@@ -23,6 +22,19 @@ api.interceptors.response.use(
     return Promise.reject(err);
   },
 );
+
+// Extracts a human-readable message from an axios error, including network failures.
+export function getErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    if (!err.response) {
+      return "Cannot reach the server. Check your connection or the API URL.";
+    }
+    const detail = err.response.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
+  }
+  return fallback;
+}
 
 export const authApi = {
   login: (email: string, password: string) =>
@@ -52,7 +64,7 @@ export const postsApi = {
 
 export const accountsApi = {
   list: () => api.get("/accounts").then((r) => r.data),
-  oauthUrl: (platform: string) => api.get(`/accounts/oauth/${platform}/url`).then((r) => r.data),
+  oauthUrl: (platform: string) => api.get(`/oauth/${platform}/url`).then((r) => r.data),
   disconnect: (id: string) => api.delete(`/accounts/${id}`),
 };
 

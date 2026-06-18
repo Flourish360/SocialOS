@@ -20,6 +20,44 @@ def _error_redirect(msg: str):
     return f"{settings.FRONTEND_URL}/settings?error={msg}"
 
 
+@router.get("/{platform}/url")
+def get_oauth_url(platform: str, current_user: User = Depends(get_current_user)):
+    """Return the OAuth authorization URL for the given platform as JSON."""
+    uid = current_user.id
+    urls = {
+        "instagram": (
+            f"https://api.instagram.com/oauth/authorize"
+            f"?client_id={settings.INSTAGRAM_CLIENT_ID}"
+            f"&redirect_uri={INSTAGRAM_CALLBACK}"
+            f"&scope=instagram_basic,instagram_content_publish,instagram_manage_insights"
+            f"&response_type=code&state={uid}"
+        ) if settings.INSTAGRAM_CLIENT_ID else None,
+        "twitter": (
+            f"https://twitter.com/i/oauth2/authorize"
+            f"?response_type=code&client_id={settings.TWITTER_CLIENT_ID}"
+            f"&redirect_uri={settings.FRONTEND_URL}/api/oauth/twitter/callback"
+            f"&scope=tweet.read+tweet.write+users.read+offline.access"
+            f"&state={uid}&code_challenge=challenge&code_challenge_method=plain"
+        ) if settings.TWITTER_CLIENT_ID else None,
+        "linkedin": (
+            f"https://www.linkedin.com/oauth/v2/authorization"
+            f"?response_type=code&client_id={settings.LINKEDIN_CLIENT_ID}"
+            f"&redirect_uri={settings.FRONTEND_URL}/api/oauth/linkedin/callback"
+            f"&scope=openid+profile+email+w_member_social&state={uid}"
+        ) if settings.LINKEDIN_CLIENT_ID else None,
+        "tiktok": (
+            f"https://www.tiktok.com/v2/auth/authorize"
+            f"?client_key={settings.TIKTOK_CLIENT_ID}"
+            f"&response_type=code&scope=user.info.basic,video.publish"
+            f"&redirect_uri={settings.FRONTEND_URL}/api/oauth/tiktok/callback&state={uid}"
+        ) if settings.TIKTOK_CLIENT_ID else None,
+    }
+    url = urls.get(platform)
+    if not url:
+        raise HTTPException(400, f"Platform '{platform}' not configured or not supported")
+    return {"url": url}
+
+
 def _upsert_account(db: Session, user_id: str, platform: str, access_token: str,
                     refresh_token: str | None = None, handle: str = "", platform_user_id: str = ""):
     account = db.query(SocialAccount).filter(
