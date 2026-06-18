@@ -48,15 +48,17 @@ def _upsert_account(db: Session, user_id: str, platform: str, access_token: str,
 
 # ── Instagram (Meta) ──────────────────────────────────────────────────────────
 
+INSTAGRAM_CALLBACK = "https://socialos-production-1712.up.railway.app/api/oauth/instagram/callback"
+
+
 @router.get("/instagram")
 def instagram_auth(current_user: User = Depends(get_current_user)):
-    if not settings.META_APP_ID:
-        raise HTTPException(400, "META_APP_ID not configured — add it to backend/.env")
-    redirect_uri = f"{settings.FRONTEND_URL}/api/oauth/instagram/callback"
+    if not settings.INSTAGRAM_CLIENT_ID:
+        raise HTTPException(400, "INSTAGRAM_CLIENT_ID not configured — add it to Railway variables")
     url = (
         f"https://api.instagram.com/oauth/authorize"
-        f"?client_id={settings.META_APP_ID}"
-        f"&redirect_uri={redirect_uri}"
+        f"?client_id={settings.INSTAGRAM_CLIENT_ID}"
+        f"&redirect_uri={INSTAGRAM_CALLBACK}"
         f"&scope=instagram_basic,instagram_content_publish,instagram_manage_insights"
         f"&response_type=code"
         f"&state={current_user.id}"
@@ -66,18 +68,17 @@ def instagram_auth(current_user: User = Depends(get_current_user)):
 
 @router.get("/instagram/callback")
 async def instagram_callback(code: str, state: str = "", db: Session = Depends(get_db)):
-    if not state or not settings.META_APP_ID:
+    if not state or not settings.INSTAGRAM_CLIENT_ID:
         return RedirectResponse(_error_redirect("oauth_failed"))
 
-    redirect_uri = f"{settings.FRONTEND_URL}/api/oauth/instagram/callback"
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://api.instagram.com/oauth/access_token",
             data={
-                "client_id": settings.META_APP_ID,
-                "client_secret": settings.META_APP_SECRET,
+                "client_id": settings.INSTAGRAM_CLIENT_ID,
+                "client_secret": settings.INSTAGRAM_CLIENT_SECRET,
                 "grant_type": "authorization_code",
-                "redirect_uri": redirect_uri,
+                "redirect_uri": INSTAGRAM_CALLBACK,
                 "code": code,
             },
         )
