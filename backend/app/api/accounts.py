@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 from ..api.deps import get_current_user
+from ..db.database import get_db
 from ..models.user import User
+from ..models.social_account import SocialAccount
 from ..mock.data import MOCK_ACCOUNTS
 from ..core.config import settings
 
@@ -8,26 +11,33 @@ router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 
 @router.get("")
-def list_accounts(current_user: User = Depends(get_current_user)):
+def list_accounts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if settings.USE_MOCK_DATA:
         return MOCK_ACCOUNTS
-    # TODO: query db for real connected accounts
-    return []
+    accounts = db.query(SocialAccount).filter(
+        SocialAccount.user_id == current_user.id,
+        SocialAccount.is_connected == True,
+    ).all()
+    return [
+        {
+            "id": a.id,
+            "platform": a.platform,
+            "handle": a.handle,
+            "platform_user_id": a.platform_user_id,
+            "is_connected": a.is_connected,
+        }
+        for a in accounts
+    ]
 
 
 @router.delete("/{account_id}")
-def disconnect_account(account_id: str, current_user: User = Depends(get_current_user)):
+def disconnect_account(account_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not settings.USE_MOCK_DATA:
+        account = db.query(SocialAccount).filter(
+            SocialAccount.id == account_id,
+            SocialAccount.user_id == current_user.id,
+        ).first()
+        if account:
+            account.is_connected = False
+            db.commit()
     return {"message": "Account disconnected", "account_id": account_id}
-
-
-@router.get("/oauth/{platform}/url")
-def get_oauth_url(platform: str, current_user: User = Depends(get_current_user)):
-    """
-    Returns the OAuth URL to redirect the user to for connecting a platform.
-    Placeholder — real URLs built with platform-specific SDKs.
-    """
-    return {
-        "platform": platform,
-        "url": f"https://oauth.example.com/{platform}?user={current_user.id}",
-        "note": "Replace with real OAuth URL from platform SDK",
-    }

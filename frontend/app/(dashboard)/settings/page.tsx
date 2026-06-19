@@ -248,6 +248,12 @@ export default function SettingsPage() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    accountsApi.list().then((accounts: {platform: string}[]) => {
+      setConnectedPlatforms(accounts.map((a) => a.platform));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const connected = searchParams.get("connected");
     const error = searchParams.get("error");
     if (connected) {
