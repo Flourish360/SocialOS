@@ -243,7 +243,7 @@ const SECTIONS = ["Accounts", "Brand Kit", "Notifications", "Team", "Security"] 
 
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<typeof SECTIONS[number]>("Accounts");
-  const [connectedPlatforms, setConnectedPlatforms] = useState(["instagram", "twitter", "linkedin", "tiktok", "youtube"]);
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const [brandTone, setBrandTone] = useState("casual");
   const [brandName, setBrandName] = useState("Your Brand");
 
