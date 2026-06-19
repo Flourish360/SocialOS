@@ -29,7 +29,7 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
             f"https://api.instagram.com/oauth/authorize"
             f"?client_id={settings.INSTAGRAM_CLIENT_ID}"
             f"&redirect_uri={INSTAGRAM_CALLBACK}"
-            f"&scope=instagram_basic,instagram_content_publish,instagram_manage_insights"
+            f"&scope=instagram_business_basic,instagram_business_content_publish,instagram_business_manage_messages,instagram_business_manage_comments"
             f"&response_type=code&state={uid}"
         ) if settings.INSTAGRAM_CLIENT_ID else None,
         "twitter": (
@@ -97,7 +97,7 @@ def instagram_auth(current_user: User = Depends(get_current_user)):
         f"https://api.instagram.com/oauth/authorize"
         f"?client_id={settings.INSTAGRAM_CLIENT_ID}"
         f"&redirect_uri={INSTAGRAM_CALLBACK}"
-        f"&scope=instagram_basic,instagram_content_publish,instagram_manage_insights"
+        f"&scope=instagram_business_basic,instagram_business_content_publish,instagram_business_manage_messages,instagram_business_manage_comments"
         f"&response_type=code"
         f"&state={current_user.id}"
     )
