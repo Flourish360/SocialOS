@@ -101,7 +101,7 @@ export default function AutomationPage() {
           <div className="card border-violet-500/20 mb-5">
             <div className="flex items-center gap-2 mb-4">
               <Zap className="w-4 h-4 text-violet-400" />
-              <span className="text-sm font-semibold text-white">If / Then — Rule Builder</span>
+              <span className="text-sm font-semibold text-white">If / Then - Rule Builder</span>
             </div>
 
             {/* Visual preview */}

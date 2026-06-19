@@ -180,7 +180,7 @@ export default function MediaPage() {
           <p className="text-sm text-slate-400">
             {dragging ? "Drop files here" : "Drag & drop files or click to upload"}
           </p>
-          <p className="text-xs text-slate-600">Images, videos, PDFs — up to 100 MB each</p>
+          <p className="text-xs text-slate-600">Images, videos, PDFs - up to 100 MB each</p>
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
         </div>
 

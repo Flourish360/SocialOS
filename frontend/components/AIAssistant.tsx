@@ -25,7 +25,7 @@ export default function AIAssistant() {
       id: "welcome",
       role: "assistant",
       content:
-        "Hi! I'm your AI social media strategist. Ask me anything — analytics, caption ideas, posting strategy, growth tips.",
+        "Hi! I'm your AI social media strategist. Ask me anything - analytics, caption ideas, posting strategy, growth tips.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -97,7 +97,7 @@ export default function AIAssistant() {
                   id: "welcome",
                   role: "assistant",
                   content:
-                    "Hi! I'm your AI social media strategist. Ask me anything — analytics, caption ideas, posting strategy, growth tips.",
+                    "Hi! I'm your AI social media strategist. Ask me anything - analytics, caption ideas, posting strategy, growth tips.",
                 },
               ])
             }

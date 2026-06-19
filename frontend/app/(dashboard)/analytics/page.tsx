@@ -176,7 +176,7 @@ export default function AnalyticsPage() {
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="card lg:col-span-2">
-            <h2 className="text-sm font-semibold text-white mb-4">Follower Growth — {days} Days</h2>
+            <h2 className="text-sm font-semibold text-white mb-4">Follower Growth - {days} Days</h2>
             {loading ? (
               <div className="h-[220px] flex items-center justify-center">
                 <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
@@ -235,7 +235,7 @@ export default function AnalyticsPage() {
           </div>
 
           {topPosts.length === 0 ? (
-            <p className="text-sm text-slate-500 py-4 text-center">No posts yet — start composing!</p>
+            <p className="text-sm text-slate-500 py-4 text-center">No posts yet - start composing!</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -285,7 +285,7 @@ export default function AnalyticsPage() {
                             />
                           </div>
                           <span className="text-xs font-semibold text-violet-400 w-8 text-right">
-                            {post.predicted_engagement_score ?? "—"}
+                            {post.predicted_engagement_score ?? "-"}
                           </span>
                         </div>
                       </td>

@@ -240,7 +240,7 @@ export default function CalendarPage() {
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-slate-400 shrink-0">
                     <Clock className="w-3 h-3" />
-                    {post.scheduled_at ? format(parseISO(post.scheduled_at), "MMM d, h:mm a") : "—"}
+                    {post.scheduled_at ? format(parseISO(post.scheduled_at), "MMM d, h:mm a") : "-"}
                   </div>
                 </button>
               ))}

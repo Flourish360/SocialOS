@@ -8,7 +8,7 @@ const FEATURES = [
   {
     icon: Sparkles,
     title: "AI Caption Generator",
-    desc: "Generate platform-native captions in any tone — casual, professional, funny, or inspirational — in seconds.",
+    desc: "Generate platform-native captions in any tone - casual, professional, funny, or inspirational - in seconds.",
     color: "text-violet-400",
     bg: "bg-violet-500/10",
   },
@@ -22,7 +22,7 @@ const FEATURES = [
   {
     icon: BarChart2,
     title: "Deep Analytics",
-    desc: "Track impressions, reach, engagement rate, and ROI. Ask questions in plain English — get instant data answers.",
+    desc: "Track impressions, reach, engagement rate, and ROI. Ask questions in plain English - get instant data answers.",
     color: "text-emerald-400",
     bg: "bg-emerald-500/10",
   },
@@ -36,7 +36,7 @@ const FEATURES = [
   {
     icon: Zap,
     title: "Automation Rules",
-    desc: "Build if/then workflows: auto-reply to comments, repost top content, trigger email alerts — no code needed.",
+    desc: "Build if/then workflows: auto-reply to comments, repost top content, trigger email alerts - no code needed.",
     color: "text-rose-400",
     bg: "bg-rose-500/10",
   },
@@ -104,14 +104,14 @@ export default function LandingPage() {
           </h1>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
             SocialOS is the open-source AI platform that writes your captions, schedules your posts,
-            replies to your DMs, and tells you exactly what's working — all in one place.
+            replies to your DMs, and tells you exactly what's working - all in one place.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/register"
               className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-6 py-3 rounded-xl font-medium transition-colors text-base"
             >
-              Start free — no credit card
+              Start free - no credit card
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
@@ -208,7 +208,7 @@ export default function LandingPage() {
             <div className="w-5 h-5 bg-violet-600 rounded flex items-center justify-center">
               <Sparkles className="w-3 h-3 text-white" />
             </div>
-            SocialOS — MIT License
+            SocialOS - MIT License
           </div>
           <div className="flex items-center gap-6 text-sm text-slate-500">
             <Link href="/login" className="hover:text-slate-300 transition-colors">Sign in</Link>

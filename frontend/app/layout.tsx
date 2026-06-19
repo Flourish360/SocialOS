@@ -3,7 +3,7 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
-  title: "SocialOS — AI Social Media Platform",
+  title: "SocialOS - AI Social Media Platform",
   description: "Compose, schedule, automate, and understand your social media with AI.",
 };
 

@@ -12,7 +12,7 @@ import { useUIStore } from "@/store/ui";
 import { useRouter } from "next/navigation";
 
 const NAV = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Compose", href: "/compose", icon: PenSquare },
   { label: "Queue", href: "/queue", icon: ListOrdered },
   { label: "Calendar", href: "/calendar", icon: Calendar },
@@ -60,7 +60,7 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {NAV.map(({ label, href, icon: Icon, badge }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active = href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
           return (
             <Link
               key={href}

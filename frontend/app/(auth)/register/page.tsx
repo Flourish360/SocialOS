@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Sparkles, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { getErrorMessage } from "@/lib/api";
 import toast from "react-hot-toast";
 
 export default function RegisterPage() {
@@ -18,9 +19,9 @@ export default function RegisterPage() {
     try {
       await register(email, password, name);
       toast.success("Account created!");
-      router.push("/");
-    } catch {
-      toast.error("Could not create account. Try a different email.");
+      router.push("/dashboard");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not create account. Try a different email."));
     }
   };
 

@@ -27,17 +27,17 @@ const TYPE_TABS = [
 const AI_SUGGESTIONS: Record<string, string[]> = {
   urgent: [
     "Hi! We're looking into this right away and will have an update for you shortly. Thank you for your patience.",
-    "Thanks for flagging this — our team is on it. We'll get back to you within the hour.",
+    "Thanks for flagging this - our team is on it. We'll get back to you within the hour.",
     "We hear you and we're sorry for the trouble. Let us make this right. Can you DM us your details?",
   ],
   opportunity: [
     "Thanks for reaching out! We'd love to chat. DM us for pricing details.",
-    "Hi! Great question. Check out our website for all the details — and let us know if you have more questions!",
+    "Hi! Great question. Check out our website for all the details - and let us know if you have more questions!",
     "Hey, thanks for your interest! Our team will be in touch within 24 hours. 🙌",
   ],
   general: [
     "Thanks for your message! We appreciate you reaching out.",
-    "Hi there! Thanks so much — this made our day 😊",
+    "Hi there! Thanks so much - this made our day 😊",
     "Hey! We really appreciate you taking the time to write this.",
   ],
   spam: [

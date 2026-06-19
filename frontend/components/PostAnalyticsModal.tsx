@@ -88,7 +88,7 @@ export default function PostAnalyticsModal({ postId, caption, onClose }: Props) 
 
               {/* Performance over time */}
               <div>
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Performance — 7 Days</h3>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Performance - 7 Days</h3>
                 <div className="bg-slate-800/30 rounded-xl p-3 border border-slate-800">
                   <ResponsiveContainer width="100%" height={160}>
                     <AreaChart data={data.daily_series} margin={{ left: -20, right: 4 }}>

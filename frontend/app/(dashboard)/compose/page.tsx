@@ -171,7 +171,7 @@ export default function ComposePage() {
         success: Math.random() > 0.15,
         error: undefined as string | undefined,
       }));
-      results.forEach((r) => { if (!r.success) r.error = "Rate limit reached — retry in 15 min"; });
+      results.forEach((r) => { if (!r.success) r.error = "Rate limit reached - retry in 15 min"; });
       setPublishResults(results);
       setShowResults(true);
       if (results.every((r) => r.success)) { setCaption(""); setHashtags([]); }
@@ -192,7 +192,7 @@ export default function ComposePage() {
       <div className="flex-1 p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
 
-          {/* Left — Editor */}
+          {/* Left - Editor */}
           <div className="lg:col-span-2 space-y-4">
 
             {/* AI Generator */}
@@ -343,7 +343,7 @@ export default function ComposePage() {
             )}
           </div>
 
-          {/* Right — Platform selector + preview */}
+          {/* Right - Platform selector + preview */}
           <div className="space-y-4">
             <div className="card">
               <h3 className="text-sm font-semibold text-white mb-3">Publish to</h3>

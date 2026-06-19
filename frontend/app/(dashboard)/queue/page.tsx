@@ -30,7 +30,7 @@ export default function QueuePage() {
       if (queued.length === 0) {
         const MOCK_QUEUE = [
           { id: "q1", caption: "5 ways to grow your Instagram following in 2026 🚀 Thread incoming...", hashtags: ["#growth", "#instagram"], platform_account_ids: ["instagram", "twitter"], queue_slot: "9:00 AM", queue_position: 1, status: "queued", predicted_engagement_score: 88 },
-          { id: "q2", caption: "Behind the scenes of our latest product shoot — the chaos was worth it 📸", hashtags: ["#bts", "#brand"], platform_account_ids: ["instagram"], queue_slot: "12:00 PM", queue_position: 2, status: "queued", predicted_engagement_score: 76 },
+          { id: "q2", caption: "Behind the scenes of our latest product shoot - the chaos was worth it 📸", hashtags: ["#bts", "#brand"], platform_account_ids: ["instagram"], queue_slot: "12:00 PM", queue_position: 2, status: "queued", predicted_engagement_score: 76 },
           { id: "q3", caption: "We've been thinking a lot about what authenticity means in 2026. Here's our take.", hashtags: ["#marketing"], platform_account_ids: ["linkedin"], queue_slot: "6:00 PM", queue_position: 3, status: "queued", predicted_engagement_score: 82 },
           { id: "q4", caption: "Hot take: scheduling posts a week in advance is the single best habit for creators.", hashtags: ["#contentcreator", "#tips"], platform_account_ids: ["twitter", "instagram"], queue_slot: "9:00 AM", queue_position: 4, status: "queued", predicted_engagement_score: 91 },
         ];
@@ -204,7 +204,7 @@ export default function QueuePage() {
             <div>
               <p className="text-sm font-medium text-white mb-1">How the queue works</p>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Posts are automatically published at your audience's peak engagement windows — no need to pick exact times. Drag to reorder, or hit "Post now" to skip the queue. New posts land in the next available slot.
+                Posts are automatically published at your audience's peak engagement windows - no need to pick exact times. Drag to reorder, or hit "Post now" to skip the queue. New posts land in the next available slot.
               </p>
             </div>
           </div>

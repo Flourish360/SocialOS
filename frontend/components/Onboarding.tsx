@@ -48,7 +48,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       content: (
         <div className="text-center space-y-3">
           <p className="text-slate-300 text-sm leading-relaxed">
-            SocialOS manages all your social accounts in one place — scheduling, analytics, AI writing, and automation.
+            SocialOS manages all your social accounts in one place - scheduling, analytics, AI writing, and automation.
           </p>
           <div className="grid grid-cols-3 gap-3 mt-4">
             {[
@@ -68,7 +68,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     },
     {
       title: "Which platforms do you manage?",
-      subtitle: "Select all that apply — you can add more later.",
+      subtitle: "Select all that apply - you can add more later.",
       icon: null,
       content: (
         <div className="grid grid-cols-2 gap-2">
@@ -173,7 +173,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             <ul className="space-y-1.5">
               {[
                 `${selectedPlatforms.length} platform${selectedPlatforms.length !== 1 ? "s" : ""} connected`,
-                `Goal: ${selectedGoals[0] ? GOALS.find(g => g.id === selectedGoals[0])?.label : "—"}`,
+                `Goal: ${selectedGoals[0] ? GOALS.find(g => g.id === selectedGoals[0])?.label : "-"}`,
                 `Posting frequency: ${postFreq}`,
               ].map((item) => (
                 <li key={item} className="flex items-center gap-2 text-xs text-slate-300">

@@ -33,18 +33,26 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   login: async (email, password) => {
     set({ isLoading: true });
-    const data = await authApi.login(email, password);
-    localStorage.setItem("token", data.access_token);
-    localStorage.setItem("user", JSON.stringify({ id: data.user_id, email: data.email, full_name: data.full_name }));
-    set({ token: data.access_token, user: { id: data.user_id, email: data.email, full_name: data.full_name }, isLoading: false });
+    try {
+      const data = await authApi.login(email, password);
+      localStorage.setItem("token", data.access_token);
+      localStorage.setItem("user", JSON.stringify({ id: data.user_id, email: data.email, full_name: data.full_name }));
+      set({ token: data.access_token, user: { id: data.user_id, email: data.email, full_name: data.full_name } });
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
   register: async (email, password, name) => {
     set({ isLoading: true });
-    const data = await authApi.register(email, password, name);
-    localStorage.setItem("token", data.access_token);
-    localStorage.setItem("user", JSON.stringify({ id: data.user_id, email: data.email, full_name: data.full_name }));
-    set({ token: data.access_token, user: { id: data.user_id, email: data.email, full_name: data.full_name }, isLoading: false });
+    try {
+      const data = await authApi.register(email, password, name);
+      localStorage.setItem("token", data.access_token);
+      localStorage.setItem("user", JSON.stringify({ id: data.user_id, email: data.email, full_name: data.full_name }));
+      set({ token: data.access_token, user: { id: data.user_id, email: data.email, full_name: data.full_name } });
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
   logout: () => {

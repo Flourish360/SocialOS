@@ -59,7 +59,7 @@ export default function PublishResultModal({ isOpen, onClose, results }: Publish
         )}>
           {allGood
             ? `Your post is live on ${succeeded} platform${succeeded > 1 ? "s" : ""}. Analytics will update within a few minutes.`
-            : `${failed} platform${failed > 1 ? "s" : ""} failed to publish — you can retry from the Calendar page.`}
+            : `${failed} platform${failed > 1 ? "s" : ""} failed to publish - you can retry from the Calendar page.`}
         </div>
 
         {/* Per-platform results */}

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Sparkles, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { getErrorMessage } from "@/lib/api";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
@@ -17,9 +18,9 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success("Welcome back!");
-      router.push("/");
-    } catch {
-      toast.error("Invalid email or password");
+      router.push("/dashboard");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Invalid email or password"));
     }
   };
 
@@ -60,7 +61,7 @@ export default function LoginPage() {
 
         {/* Demo shortcut */}
         <div className="mt-4 p-3 bg-slate-800 rounded-lg border border-slate-700">
-          <p className="text-xs text-slate-400 mb-2">Demo — no backend needed:</p>
+          <p className="text-xs text-slate-400 mb-2">Demo - no backend needed:</p>
           <button
             onClick={() => { setEmail("demo@socialos.app"); setPassword("demo1234"); }}
             className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
