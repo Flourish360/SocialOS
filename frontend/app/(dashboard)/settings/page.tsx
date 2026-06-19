@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Header from "@/components/layout/Header";
 import { accountsApi } from "@/lib/api";
 import { CheckCircle, ExternalLink, Palette, Bell, Shield, Users, Mail, Loader2, Eye, EyeOff, Trash2, RefreshCw, AlertTriangle, XCircle } from "lucide-react";
@@ -244,6 +245,21 @@ const SECTIONS = ["Accounts", "Brand Kit", "Notifications", "Team", "Security"] 
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<typeof SECTIONS[number]>("Accounts");
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const error = searchParams.get("error");
+    if (connected) {
+      setConnectedPlatforms((prev) => prev.includes(connected) ? prev : [...prev, connected]);
+      toast.success(`${connected} connected successfully!`);
+      window.history.replaceState({}, "", "/settings");
+    }
+    if (error) {
+      toast.error(`OAuth failed: ${error}`);
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, [searchParams]);
   const [brandTone, setBrandTone] = useState("casual");
   const [brandName, setBrandName] = useState("Your Brand");
 
