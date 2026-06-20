@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
-import { Upload, Search, Image, Film, FileText, Plus, X, Download, ExternalLink, Trash2, Check } from "lucide-react";
+import { Upload, Search, Image, Film, FileText, Sparkles, Plus, X, Download, ExternalLink, Trash2, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mediaApi } from "@/lib/api";
 import toast from "react-hot-toast";
@@ -117,6 +117,34 @@ export default function MediaPage() {
     router.push("/compose");
   };
 
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+
+  const generateImage = async () => {
+    if (!aiPrompt.trim()) { toast.error("Describe what you want"); return; }
+    setGenerating(true);
+    const loadingToast = toast.loading("Generating image…");
+    try {
+      const res = await mediaApi.generate(aiPrompt);
+      const newItem: MediaItem = {
+        id: res.id || `ai-${Date.now()}`,
+        name: res.name || `AI: ${aiPrompt.slice(0, 40)}`,
+        type: "image",
+        sizeBytes: res.size_bytes || 0,
+        size: res.size_bytes > 1048576 ? `${(res.size_bytes / 1048576).toFixed(1)} MB` : `${Math.round((res.size_bytes || 0) / 1024)} KB`,
+        tags: ["ai"],
+        url: res.public_url,
+      };
+      setMedia((prev) => [newItem, ...prev]);
+      setAiPrompt("");
+      toast.success("Image generated!", { id: loadingToast });
+    } catch {
+      toast.error("Generation failed — try again", { id: loadingToast });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   useEffect(() => {
     mediaApi.list().then((items: any[]) => {
       setMedia(items.map((m) => ({
@@ -175,6 +203,34 @@ export default function MediaPage() {
     <div className="flex flex-col flex-1">
       <Header title="Media Library" subtitle="All your brand assets in one place" />
       <div className="flex-1 p-6 space-y-5 overflow-y-auto">
+
+        {/* AI Image Generator */}
+        <div className="card border-violet-500/20">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="w-4 h-4 text-violet-400" />
+            <h2 className="text-sm font-semibold text-white">AI Image Generator</h2>
+            <span className="text-xs bg-violet-500/20 text-violet-400 border border-violet-500/30 rounded-full px-2 py-0.5">Pollinations</span>
+          </div>
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              placeholder="Describe the image you want to generate…"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !generating) generateImage(); }}
+              disabled={generating}
+            />
+            <button
+              onClick={generateImage}
+              disabled={generating || !aiPrompt.trim()}
+              className="btn-primary flex items-center gap-1.5"
+            >
+              {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {generating ? "Generating…" : "Generate"}
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 mt-2">Free AI image generation. Takes 10-30s. Saved to your Media library and Cloudinary.</p>
+        </div>
 
         {/* Upload zone */}
         <div

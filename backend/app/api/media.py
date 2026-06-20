@@ -5,7 +5,7 @@ from ..db.database import get_db
 from ..models.user import User
 from ..models.media import Media
 from ..core.config import settings
-import uuid
+import uuid, httpx, urllib.parse
 
 router = APIRouter(prefix="/media", tags=["media"])
 
@@ -81,6 +81,71 @@ async def upload_file(
         cloudinary_key=result["public_id"],
         media_type=media_type,
         size_bytes=len(contents),
+        width=result.get("width"),
+        height=result.get("height"),
+        format=result.get("format"),
+    )
+    db.add(media)
+    db.commit()
+    db.refresh(media)
+    return _serialize(media)
+
+
+@router.post("/generate")
+def generate_image(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate an image from a prompt using Pollinations.ai (free, no API key) and store in Cloudinary."""
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(400, "Prompt required")
+
+    encoded = urllib.parse.quote(prompt)
+    seed = uuid.uuid4().hex[:8]
+    pollinations_url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&seed={seed}&nologo=true"
+
+    try:
+        with httpx.Client(timeout=60) as client:
+            resp = client.get(pollinations_url, follow_redirects=True)
+            resp.raise_for_status()
+            image_bytes = resp.content
+    except Exception as e:
+        raise HTTPException(502, f"Image generation failed: {e}")
+
+    if not _cloudinary_configured():
+        # Fallback: return Pollinations URL directly
+        return {
+            "public_url": pollinations_url,
+            "key": f"pollinations/{seed}",
+            "type": "image",
+            "mock": True,
+        }
+
+    import cloudinary
+    import cloudinary.uploader
+
+    cloudinary.config(
+        cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+        api_key=settings.CLOUDINARY_API_KEY,
+        api_secret=settings.CLOUDINARY_API_SECRET,
+        secure=True,
+    )
+
+    result = cloudinary.uploader.upload(
+        image_bytes,
+        folder=f"socialos/{current_user.id}/ai",
+        resource_type="image",
+    )
+
+    media = Media(
+        user_id=current_user.id,
+        name=f"AI: {prompt[:60]}",
+        public_url=result["secure_url"],
+        cloudinary_key=result["public_id"],
+        media_type="image",
+        size_bytes=len(image_bytes),
         width=result.get("width"),
         height=result.get("height"),
         format=result.get("format"),

@@ -89,6 +89,7 @@ export const mediaApi = {
       headers: { "Content-Type": "multipart/form-data" },
     }).then((r) => r.data);
   },
+  generate: (prompt: string) => api.post("/media/generate", { prompt }, { timeout: 90000 }).then((r) => r.data),
   delete: (id: string) => api.delete(`/media/${id}`).then((r) => r.data),
 };
 
