@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import Header from "@/components/layout/Header";
 import { Upload, Search, Image, Film, FileText, Sparkles, Plus, X, Download, ExternalLink, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { mediaApi } from "@/lib/api";
 import toast from "react-hot-toast";
 
 const MOCK_MEDIA = [
@@ -120,23 +121,30 @@ export default function MediaPage() {
   const usedBytes = media.reduce((s, m) => s + m.sizeBytes, 0);
   const usedPct = Math.round((usedBytes / TOTAL_STORAGE) * 100);
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return;
-    Array.from(files).forEach((file) => {
-      const type = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
-      const url = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
-      const newItem: MediaItem = {
-        id: `local-${Date.now()}-${Math.random()}`,
-        name: file.name,
-        type,
-        size: file.size > 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.round(file.size / 1024)} KB`,
-        sizeBytes: file.size,
-        tags: [type],
-        url,
-      };
-      setMedia((prev) => [newItem, ...prev]);
-    });
-    toast.success(`${files.length} file${files.length > 1 ? "s" : ""} added`);
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const arr = Array.from(files);
+    const uploadingToast = toast.loading(`Uploading ${arr.length} file${arr.length > 1 ? "s" : ""}…`);
+    try {
+      const results = await Promise.all(arr.map((file) => mediaApi.upload(file)));
+      results.forEach((res, i) => {
+        const file = arr[i];
+        const type = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
+        const newItem: MediaItem = {
+          id: res.key || `local-${Date.now()}-${i}`,
+          name: file.name,
+          type,
+          size: file.size > 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.round(file.size / 1024)} KB`,
+          sizeBytes: file.size,
+          tags: [type],
+          url: res.public_url,
+        };
+        setMedia((prev) => [newItem, ...prev]);
+      });
+      toast.success(`${arr.length} file${arr.length > 1 ? "s" : ""} uploaded`, { id: uploadingToast });
+    } catch (e) {
+      toast.error("Upload failed - check Cloudinary credentials", { id: uploadingToast });
+    }
   };
 
   return (

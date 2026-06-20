@@ -80,8 +80,13 @@ export const aiApi = {
 };
 
 export const mediaApi = {
-  getUploadUrl: (filename: string, content_type: string) =>
-    api.post("/media/upload-url", { filename, content_type }).then((r) => r.data),
+  upload: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/media/upload", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }).then((r) => r.data);
+  },
   delete: (key: string) => api.delete(`/media/${key}`).then((r) => r.data),
 };
 
