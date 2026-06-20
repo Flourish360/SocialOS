@@ -12,6 +12,8 @@ interface Props {
   hashtags: string[];
   platforms: string[];
   onScheduled: () => void;
+  mediaUrl?: string;
+  mediaType?: string;
 }
 
 const PLATFORM_EMOJI: Record<string, string> = {
@@ -28,7 +30,7 @@ function defaultDateTime() {
   };
 }
 
-export default function ScheduleModal({ isOpen, onClose, caption, hashtags, platforms, onScheduled }: Props) {
+export default function ScheduleModal({ isOpen, onClose, caption, hashtags, platforms, onScheduled, mediaUrl, mediaType }: Props) {
   const def = defaultDateTime();
   const [date, setDate] = useState(def.date);
   const [time, setTime] = useState(def.time);
@@ -47,7 +49,8 @@ export default function ScheduleModal({ isOpen, onClose, caption, hashtags, plat
         caption,
         hashtags,
         platform_account_ids: platforms,
-        media_type: "none",
+        media_type: mediaType || "none",
+        media_url: mediaUrl,
         status: "scheduled",
         scheduled_at: scheduledAt.toISOString(),
       });

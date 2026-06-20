@@ -536,7 +536,9 @@ export default function ComposePage() {
         caption={caption}
         hashtags={hashtags}
         platforms={selectedPlatforms}
-        onScheduled={() => { setCaption(""); setHashtags([]); }}
+        mediaUrl={attachedMedia?.url}
+        mediaType={attachedMedia?.type}
+        onScheduled={() => { setCaption(""); setHashtags([]); setAttachedMedia(null); }}
       />
 
       <PublishResultModal
