@@ -50,7 +50,9 @@ function PreviewModal({ item, onClose, onDelete }: PreviewModalProps) {
 
         {/* Preview area */}
         <div className="bg-slate-950 flex items-center justify-center" style={{ minHeight: 320 }}>
-          {item.url ? (
+          {item.url && item.type === "video" ? (
+            <video src={item.url} controls playsInline className="max-w-full max-h-80" />
+          ) : item.url ? (
             <img src={item.url} alt={item.name} className="max-w-full max-h-80 object-contain" />
           ) : (
             <div className="flex flex-col items-center gap-3 text-slate-600">
@@ -267,7 +269,9 @@ export default function MediaPage() {
                 onClick={() => setPreview(item)}
                 className="group relative aspect-square rounded-xl border border-slate-700 overflow-hidden bg-slate-800 hover:border-violet-500/50 transition-all"
               >
-                {item.url ? (
+                {item.url && item.type === "video" ? (
+                  <video src={item.url} muted playsInline preload="metadata" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                ) : item.url ? (
                   <img src={item.url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">

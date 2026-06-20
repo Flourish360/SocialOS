@@ -297,7 +297,11 @@ export default function ComposePage() {
                 <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-3">
                   <div className="flex gap-2 flex-1 overflow-x-auto">
                     {(attachedMediaList.length > 0 ? attachedMediaList : [attachedMedia!]).map((m) => (
-                      <img key={m.id} src={m.url} alt="attached" className="w-16 h-16 object-cover rounded-lg border border-slate-700 shrink-0" />
+                      m.type === "video" ? (
+                        <video key={m.id} src={m.url} muted playsInline preload="metadata" className="w-16 h-16 object-cover rounded-lg border border-slate-700 shrink-0" />
+                      ) : (
+                        <img key={m.id} src={m.url} alt="attached" className="w-16 h-16 object-cover rounded-lg border border-slate-700 shrink-0" />
+                      )
                     ))}
                   </div>
                   <div className="text-xs text-slate-400 shrink-0">
@@ -608,6 +612,8 @@ export default function ComposePage() {
                       >
                         {m.public_url && m.type === "image" ? (
                           <img src={m.public_url} alt={m.name} className="w-full h-full object-cover" />
+                        ) : m.public_url && m.type === "video" ? (
+                          <video src={m.public_url} muted playsInline preload="metadata" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs p-2">{m.name}</div>
                         )}
