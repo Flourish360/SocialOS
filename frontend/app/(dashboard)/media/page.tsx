@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
-import { Upload, Search, Image, Film, FileText, Sparkles, Plus, X, Download, ExternalLink, Trash2, Check } from "lucide-react";
+import { Upload, Search, Image, Film, FileText, Plus, X, Download, ExternalLink, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mediaApi } from "@/lib/api";
 import toast from "react-hot-toast";
@@ -132,7 +132,6 @@ export default function MediaPage() {
   }, []);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string | null>(null);
-  const [aiPrompt, setAiPrompt] = useState("");
   const [preview, setPreview] = useState<MediaItem | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -176,27 +175,6 @@ export default function MediaPage() {
     <div className="flex flex-col flex-1">
       <Header title="Media Library" subtitle="All your brand assets in one place" />
       <div className="flex-1 p-6 space-y-5 overflow-y-auto">
-
-        {/* AI Image Generator */}
-        <div className="card border-violet-500/20">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-4 h-4 text-violet-400" />
-            <h2 className="text-sm font-semibold text-white">AI Image Generator</h2>
-            <span className="text-xs bg-violet-500/20 text-violet-400 border border-violet-500/30 rounded-full px-2 py-0.5">DALL-E 3</span>
-          </div>
-          <div className="flex gap-2">
-            <input
-              className="input flex-1"
-              placeholder="Describe the image you want to generate…"
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-            />
-            <button className="btn-primary flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" /> Generate
-            </button>
-          </div>
-          <p className="text-xs text-slate-500 mt-2">Wire in your OpenAI API key in .env to activate image generation</p>
-        </div>
 
         {/* Upload zone */}
         <div

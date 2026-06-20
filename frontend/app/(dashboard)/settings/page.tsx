@@ -7,10 +7,7 @@ import { CheckCircle, ExternalLink, Palette, Bell, Shield, Users, Mail, Loader2,
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
-const MOCK_MEMBERS = [
-  { id: "1", name: "Demo User", email: "demo@socialos.app", role: "Admin", avatar: "D", joined: "Jan 2026" },
-  { id: "2", name: "Alex Kim", email: "alex@socialos.app", role: "Editor", avatar: "A", joined: "Feb 2026" },
-  { id: "3", name: "Sam Rivera", email: "sam@socialos.app", role: "Viewer", avatar: "S", joined: "Mar 2026" },
+const MOCK_MEMBERS: { id: string; name: string; email: string; role: string; avatar: string; joined: string }[] = [
 ];
 
 function TeamSection() {
@@ -183,12 +180,12 @@ function SecuritySection() {
 }
 
 const PLATFORMS_CONNECT = [
-  { id: "instagram", label: "Instagram", emoji: "📸", description: "Meta Graph API", username: "@yourbrand", followers: "24.3K", health: "healthy", lastSync: "2 min ago" },
-  { id: "twitter", label: "Twitter/X", emoji: "🐦", description: "Twitter API v2", username: "@yourbrand_x", followers: "11.8K", health: "healthy", lastSync: "5 min ago" },
-  { id: "linkedin", label: "LinkedIn", emoji: "💼", description: "LinkedIn Marketing API", username: "Your Brand Co.", followers: "4.2K", health: "expiring", lastSync: "1h ago" },
-  { id: "tiktok", label: "TikTok", emoji: "🎵", description: "TikTok for Developers", username: "@yourbrand_tt", followers: "62.1K", health: "healthy", lastSync: "8 min ago" },
-  { id: "youtube", label: "YouTube", emoji: "▶️", description: "YouTube Data API v3", username: "Your Brand Channel", followers: "8.9K", health: "healthy", lastSync: "30 min ago" },
-  { id: "facebook", label: "Facebook", emoji: "🔵", description: "Meta Graph API", username: "Your Brand Page", followers: "15.7K", health: "expired", lastSync: "3d ago" },
+  { id: "instagram", label: "Instagram", emoji: "📸", description: "Meta Graph API", username: null, followers: null, health: null, lastSync: null },
+  { id: "twitter", label: "Twitter/X", emoji: "🐦", description: "Twitter API v2", username: null, followers: null, health: null, lastSync: null },
+  { id: "linkedin", label: "LinkedIn", emoji: "💼", description: "LinkedIn Marketing API", username: null, followers: null, health: null, lastSync: null },
+  { id: "tiktok", label: "TikTok", emoji: "🎵", description: "TikTok for Developers", username: null, followers: null, health: null, lastSync: null },
+  { id: "youtube", label: "YouTube", emoji: "▶️", description: "YouTube Data API v3", username: null, followers: null, health: null, lastSync: null },
+  { id: "facebook", label: "Facebook", emoji: "🔵", description: "Meta Graph API", username: null, followers: null, health: null, lastSync: null },
   { id: "pinterest", label: "Pinterest", emoji: "📌", description: "Pinterest API v5", username: null, followers: null, health: null, lastSync: null },
   { id: "threads", label: "Threads", emoji: "🧵", description: "Threads API", username: null, followers: null, health: null, lastSync: null },
 ];
@@ -247,9 +244,14 @@ export default function SettingsPage() {
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const searchParams = useSearchParams();
 
+  const [accountInfo, setAccountInfo] = useState<Record<string, { handle?: string }>>({});
+
   useEffect(() => {
-    accountsApi.list().then((accounts: {platform: string}[]) => {
+    accountsApi.list().then((accounts: {platform: string; handle?: string}[]) => {
       setConnectedPlatforms(accounts.map((a) => a.platform));
+      const info: Record<string, { handle?: string }> = {};
+      accounts.forEach((a) => { info[a.platform] = { handle: a.handle }; });
+      setAccountInfo(info);
     }).catch(() => {});
   }, []);
 
@@ -342,12 +344,8 @@ export default function SettingsPage() {
                       <span className="text-xl leading-none">{p.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white">{p.label}</p>
-                        {connected && p.username ? (
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-slate-400">{p.username}</span>
-                            <span className="text-slate-700">·</span>
-                            <span className="text-xs text-slate-400">{p.followers} followers</span>
-                          </div>
+                        {connected && accountInfo[p.id]?.handle ? (
+                          <p className="text-xs text-slate-400 mt-0.5">@{accountInfo[p.id]?.handle}</p>
                         ) : (
                           <p className="text-xs text-slate-500">{p.description}</p>
                         )}

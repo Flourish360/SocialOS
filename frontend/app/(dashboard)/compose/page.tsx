@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { Sparkles, Hash, Smile, Image, Send, Calendar, Loader2, CheckCircle, Wand2, Save, FolderOpen, X } from "lucide-react";
-import { aiApi, postsApi, mediaApi } from "@/lib/api";
+import { aiApi, postsApi, mediaApi, accountsApi } from "@/lib/api";
 import toast from "react-hot-toast";
 import { cn, PLATFORM_COLORS } from "@/lib/utils";
 import ScheduleModal from "@/components/ScheduleModal";
@@ -29,7 +29,8 @@ const TONES = ["casual", "professional", "humorous", "inspirational"] as const;
 export default function ComposePage() {
   const [caption, setCaption] = useState("");
   const [hashtags, setHashtags] = useState<string[]>([]);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["instagram", "twitter"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const [tone, setTone] = useState<typeof TONES[number]>("casual");
   const [topic, setTopic] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -69,6 +70,12 @@ export default function ComposePage() {
         sessionStorage.removeItem("compose_prefill_media");
       }
     } catch {}
+
+    accountsApi.list().then((accounts: { platform: string }[]) => {
+      const platforms = accounts.map((a) => a.platform);
+      setConnectedPlatforms(platforms);
+      setSelectedPlatforms(platforms);
+    }).catch(() => {});
   }, []);
 
   const saveTemplate = () => {
@@ -401,17 +408,21 @@ export default function ComposePage() {
               <div className="space-y-2">
                 {PLATFORMS.map((p) => {
                   const selected = selectedPlatforms.includes(p.id);
+                  const isConnected = connectedPlatforms.includes(p.id);
                   return (
                     <button
                       key={p.id}
-                      onClick={() => togglePlatform(p.id)}
+                      onClick={() => isConnected && togglePlatform(p.id)}
+                      disabled={!isConnected}
+                      title={isConnected ? "" : "Connect this platform in Settings"}
                       className={cn("w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                        !isConnected ? "border-slate-800 bg-slate-900/50 opacity-50 cursor-not-allowed" :
                         selected ? "border-violet-500/50 bg-violet-500/10" : "border-slate-700 bg-slate-800/50 hover:border-slate-600")}
                     >
                       <span className="text-lg leading-none">{p.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-200">{p.label}</p>
-                        <p className="text-xs text-slate-500">{p.limit.toLocaleString()} char limit</p>
+                        <p className="text-xs text-slate-500">{isConnected ? `${p.limit.toLocaleString()} char limit` : "Not connected"}</p>
                       </div>
                       {selected
                         ? <CheckCircle className="w-4 h-4 text-violet-400 shrink-0" />
