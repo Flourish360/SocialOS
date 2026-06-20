@@ -7,6 +7,7 @@ class PostCreate(BaseModel):
     caption: str
     hashtags: List[str] = []
     media_urls: List[str] = []
+    media_url: Optional[str] = None
     media_type: str = "none"
     platform_account_ids: List[str]
     scheduled_at: Optional[datetime] = None

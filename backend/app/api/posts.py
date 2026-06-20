@@ -4,9 +4,12 @@ from ..api.deps import get_current_user
 from ..db.database import get_db
 from ..models.user import User
 from ..models.post import Post
+from ..models.social_account import SocialAccount
 from ..schemas.post import PostCreate, PostUpdate
 from ..mock.data import MOCK_POSTS
 from ..core.config import settings
+from ..services.publishers import publish_to_instagram
+from datetime import datetime
 import uuid, random
 
 router = APIRouter(prefix="/posts", tags=["posts"])
@@ -136,15 +139,46 @@ def create_post(
         MOCK_POSTS.append(new_post)
         return new_post
 
+    media_urls = body.media_urls or ([body.media_url] if body.media_url else [])
+    full_caption = body.caption + ("\n\n" + " ".join(body.hashtags) if body.hashtags else "")
+
+    publish_results: list[dict] = []
+    if not body.scheduled_at:
+        # Publish immediately to each selected platform
+        for platform in body.platform_account_ids:
+            account = db.query(SocialAccount).filter(
+                SocialAccount.user_id == current_user.id,
+                SocialAccount.platform == platform,
+                SocialAccount.is_connected == True,
+            ).first()
+            if not account or not account.access_token:
+                publish_results.append({"platform": platform, "success": False, "error": "Not connected"})
+                continue
+
+            if platform == "instagram":
+                result = publish_to_instagram(
+                    access_token=account.access_token,
+                    ig_user_id=account.platform_user_id,
+                    caption=full_caption,
+                    media_url=body.media_url or (media_urls[0] if media_urls else None),
+                )
+                publish_results.append({"platform": "instagram", **result})
+            else:
+                publish_results.append({"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"})
+
+    any_success = any(r["success"] for r in publish_results)
+    status = "scheduled" if body.scheduled_at else ("published" if any_success else "failed")
+
     post = Post(
         id=str(uuid.uuid4()),
         user_id=current_user.id,
         caption=body.caption,
         hashtags=body.hashtags,
-        media_urls=body.media_urls,
+        media_urls=media_urls,
         media_type=body.media_type,
-        status="scheduled" if body.scheduled_at else "draft",
+        status=status,
         scheduled_at=body.scheduled_at,
+        published_at=datetime.utcnow() if any_success else None,
         platform_account_ids=body.platform_account_ids,
         ai_generated=False,
         predicted_engagement_score=random.randint(60, 95),
@@ -153,7 +187,9 @@ def create_post(
     db.add(post)
     db.commit()
     db.refresh(post)
-    return _post_to_dict(post)
+    response = _post_to_dict(post)
+    response["publish_results"] = publish_results
+    return response
 
 
 @router.post("/queue", status_code=201)

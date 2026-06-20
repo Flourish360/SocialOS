@@ -167,15 +167,14 @@ export default function ComposePage() {
     if (!selectedPlatforms.length) { toast.error("Select at least one platform"); return; }
     setPublishing(true);
     try {
-      await postsApi.create({
+      const res = await postsApi.create({
         caption,
         hashtags,
         platform_account_ids: selectedPlatforms,
         media_type: attachedMedia?.type || "none",
         media_url: attachedMedia?.url,
       });
-      // Simulate per-platform results (in production these come from the API response)
-      const results = selectedPlatforms.map((p) => ({
+      const results = res.publish_results?.length ? res.publish_results : selectedPlatforms.map((p: string) => ({
         platform: p,
         success: Math.random() > 0.15,
         error: undefined as string | undefined,
