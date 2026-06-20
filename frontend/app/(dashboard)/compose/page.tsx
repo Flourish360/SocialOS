@@ -179,10 +179,10 @@ export default function ComposePage() {
         success: Math.random() > 0.15,
         error: undefined as string | undefined,
       }));
-      results.forEach((r) => { if (!r.success) r.error = "Rate limit reached - retry in 15 min"; });
+      results.forEach((r: { success: boolean; error?: string }) => { if (!r.success && !r.error) r.error = "Rate limit reached - retry in 15 min"; });
       setPublishResults(results);
       setShowResults(true);
-      if (results.every((r) => r.success)) { setCaption(""); setHashtags([]); }
+      if (results.every((r: { success: boolean }) => r.success)) { setCaption(""); setHashtags([]); setAttachedMedia(null); }
     } catch {
       toast.error("Publish failed");
     } finally {
