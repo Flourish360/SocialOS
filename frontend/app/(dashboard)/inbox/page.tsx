@@ -236,7 +236,7 @@ export default function InboxPage() {
               {/* AI suggestions */}
               <div className="p-4 border-b border-slate-800 shrink-0">
                 <p className="text-xs text-slate-500 mb-2 flex items-center gap-1.5">
-                  <span className="text-violet-400">✦</span> AI reply suggestions
+                  <span className="text-violet-400">✦</span> Quick reply templates
                 </p>
                 <div className="space-y-1.5">
                   {suggestions.map((s) => (

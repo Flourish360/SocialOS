@@ -16,12 +16,16 @@ const PLATFORM_EMOJI: Record<string, string> = {
 
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState<any[]>([]);
+  const [myEngagement, setMyEngagement] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: "", handle: "", platform: "instagram" });
 
   useEffect(() => {
     automationApi.competitors().then(setCompetitors);
+    import("@/lib/api").then(({ analyticsApi }) =>
+      analyticsApi.summary().then((s: any) => setMyEngagement(s?.avg_engagement_rate ?? null))
+    );
   }, []);
 
   const addCompetitor = async () => {
@@ -120,14 +124,14 @@ export default function CompetitorsPage() {
             <h2 className="text-sm font-semibold text-white mb-4">Engagement Rate Comparison</h2>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={[
-                { name: "You", engagement: 5.0 },
+                ...(myEngagement !== null ? [{ name: "You", engagement: myEngagement }] : []),
                 ...competitors.map((c) => ({ name: c.name, engagement: parseFloat(c.avg_engagement) }))
               ]} margin={{ left: -20, right: 4 }}>
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                 <Tooltip formatter={(v: number) => [`${v}%`, "Eng. Rate"]} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
                 <Bar dataKey="engagement" radius={[4, 4, 0, 0]}>
-                  {[{ name: "You" }, ...competitors].map((_, i) => (
+                  {[...(myEngagement !== null ? [{ name: "You" }] : []), ...competitors].map((_, i) => (
                     <Cell key={i} fill={i === 0 ? "#8b5cf6" : COLORS[i % COLORS.length]} />
                   ))}
                 </Bar>
