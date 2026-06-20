@@ -41,6 +41,7 @@ export default function ComposePage() {
   const [rewriting, setRewriting] = useState(false);
   const [publishResults, setPublishResults] = useState<{ platform: string; success: boolean; error?: string }[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [lastPostId, setLastPostId] = useState<string | undefined>(undefined);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [hashtagGroups, setHashtagGroups] = useState<HashtagGroup[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -174,6 +175,7 @@ export default function ComposePage() {
         media_type: attachedMedia?.type || "none",
         media_url: attachedMedia?.url,
       });
+      setLastPostId(res.id);
       const results = res.publish_results?.length ? res.publish_results : selectedPlatforms.map((p: string) => ({
         platform: p,
         success: Math.random() > 0.15,
@@ -545,6 +547,8 @@ export default function ComposePage() {
         isOpen={showResults}
         onClose={() => setShowResults(false)}
         results={publishResults}
+        postId={lastPostId}
+        onRetried={(newResults) => setPublishResults(newResults)}
       />
 
       {showMediaPicker && (

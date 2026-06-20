@@ -192,6 +192,54 @@ def create_post(
     return response
 
 
+@router.post("/{post_id}/retry")
+def retry_post(
+    post_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Re-attempt publishing a failed post."""
+    post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
+    if not post:
+        raise HTTPException(404, "Post not found")
+
+    full_caption = post.caption + ("\n\n" + " ".join(post.hashtags) if post.hashtags else "")
+    media_url = post.media_urls[0] if post.media_urls else None
+
+    publish_results: list[dict] = []
+    for platform in (post.platform_account_ids or []):
+        account = db.query(SocialAccount).filter(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.platform == platform,
+            SocialAccount.is_connected == True,
+        ).first()
+        if not account or not account.access_token:
+            publish_results.append({"platform": platform, "success": False, "error": "Not connected"})
+            continue
+
+        if platform == "instagram":
+            result = publish_to_instagram(
+                access_token=account.access_token,
+                ig_user_id=account.platform_user_id,
+                caption=full_caption,
+                media_url=media_url,
+            )
+            publish_results.append({"platform": "instagram", **result})
+        else:
+            publish_results.append({"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"})
+
+    any_success = any(r["success"] for r in publish_results)
+    post.status = "published" if any_success else "failed"
+    if any_success:
+        post.published_at = datetime.utcnow()
+    db.commit()
+    db.refresh(post)
+
+    response = _post_to_dict(post)
+    response["publish_results"] = publish_results
+    return response
+
+
 @router.post("/queue", status_code=201)
 def add_to_queue(
     body: PostCreate,

@@ -1,7 +1,10 @@
 "use client";
-import { CheckCircle, XCircle, ExternalLink, Calendar, X } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle, XCircle, ExternalLink, Calendar, X, RefreshCw, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { postsApi } from "@/lib/api";
+import toast from "react-hot-toast";
 
 interface PlatformResult {
   platform: string;
@@ -14,6 +17,8 @@ interface PublishResultModalProps {
   isOpen: boolean;
   onClose: () => void;
   results: PlatformResult[];
+  postId?: string;
+  onRetried?: (newResults: PlatformResult[]) => void;
 }
 
 const PLATFORM_META: Record<string, { emoji: string; label: string }> = {
@@ -24,12 +29,34 @@ const PLATFORM_META: Record<string, { emoji: string; label: string }> = {
   facebook:  { emoji: "🔵", label: "Facebook" },
 };
 
-export default function PublishResultModal({ isOpen, onClose, results }: PublishResultModalProps) {
+export default function PublishResultModal({ isOpen, onClose, results, postId, onRetried }: PublishResultModalProps) {
+  const [retrying, setRetrying] = useState(false);
+
   if (!isOpen) return null;
 
   const succeeded = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success).length;
   const allGood = failed === 0;
+
+  const handleRetry = async () => {
+    if (!postId) { toast.error("Cannot retry — post ID missing"); return; }
+    setRetrying(true);
+    try {
+      const res = await postsApi.retry(postId);
+      const newResults: PlatformResult[] = res.publish_results || [];
+      onRetried?.(newResults);
+      const newSucceeded = newResults.filter((r) => r.success).length;
+      if (newSucceeded > 0) {
+        toast.success(`Retry succeeded on ${newSucceeded} platform${newSucceeded > 1 ? "s" : ""}`);
+      } else {
+        toast.error("Retry failed again");
+      }
+    } catch {
+      toast.error("Retry request failed");
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   return (
     <>
@@ -113,9 +140,21 @@ export default function PublishResultModal({ isOpen, onClose, results }: Publish
           >
             <Calendar className="w-4 h-4" /> View in Calendar
           </Link>
-          <button onClick={onClose} className="btn-primary text-sm">
-            Done
-          </button>
+          <div className="flex items-center gap-2">
+            {failed > 0 && postId && (
+              <button
+                onClick={handleRetry}
+                disabled={retrying}
+                className="btn-secondary flex items-center gap-1.5 text-sm"
+              >
+                {retrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Retry failed
+              </button>
+            )}
+            <button onClick={onClose} className="btn-primary text-sm">
+              Done
+            </button>
+          </div>
         </div>
       </div>
     </>

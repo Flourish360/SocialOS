@@ -60,6 +60,7 @@ export const postsApi = {
   delete: (id: string) => api.delete(`/posts/${id}`),
   analytics: (id: string) => api.get(`/posts/${id}/analytics`).then((r) => r.data),
   addToQueue: (body: Record<string, unknown>) => api.post("/posts/queue", body).then((r) => r.data),
+  retry: (id: string) => api.post(`/posts/${id}/retry`).then((r) => r.data),
 };
 
 export const accountsApi = {
