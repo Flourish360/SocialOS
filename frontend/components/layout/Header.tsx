@@ -10,13 +10,8 @@ interface HeaderProps {
   subtitle?: string;
 }
 
-const NOTIFICATIONS = [
-  { id: "1", icon: TrendingUp, color: "text-emerald-400 bg-emerald-400/10", title: "Post going viral", body: "Your TikTok from Jun 11 hit 5K likes", time: "2m ago", read: false },
-  { id: "2", icon: UserPlus, color: "text-blue-400 bg-blue-400/10", title: "New followers", body: "+127 followers on Instagram today", time: "1h ago", read: false },
-  { id: "3", icon: MessageCircle, color: "text-violet-400 bg-violet-400/10", title: "Urgent inbox message", body: "@angry_customer_99 needs attention", time: "14m ago", read: false },
-  { id: "4", icon: Zap, color: "text-amber-400 bg-amber-400/10", title: "Automation triggered", body: "Viral Boost rule ran on your LinkedIn post", time: "3h ago", read: true },
-  { id: "5", icon: TrendingUp, color: "text-emerald-400 bg-emerald-400/10", title: "Weekly report ready", body: "Your analytics summary for Jun 1–7 is ready", time: "1d ago", read: true },
-];
+type Notification = { id: string; icon: typeof Bell; color: string; title: string; body: string; time: string; read: boolean };
+const NOTIFICATIONS: Notification[] = [];
 
 export default function Header({ title, subtitle }: HeaderProps) {
   const { toggleSidebar } = useUIStore();
@@ -91,6 +86,13 @@ export default function Header({ title, subtitle }: HeaderProps) {
               </div>
 
               <div className="max-h-80 overflow-y-auto divide-y divide-slate-800">
+                {notifications.length === 0 && (
+                  <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+                    <Bell className="w-6 h-6 text-slate-600 mb-2" />
+                    <p className="text-xs text-slate-400">You're all caught up</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">No new notifications</p>
+                  </div>
+                )}
                 {notifications.map((n) => {
                   const Icon = n.icon;
                   return (
@@ -120,11 +122,13 @@ export default function Header({ title, subtitle }: HeaderProps) {
                 })}
               </div>
 
-              <div className="px-4 py-2.5 border-t border-slate-800">
-                <button className="text-xs text-violet-400 hover:text-violet-300 transition-colors w-full text-center">
-                  View all notifications
-                </button>
-              </div>
+              {notifications.length > 0 && (
+                <div className="px-4 py-2.5 border-t border-slate-800">
+                  <button className="text-xs text-violet-400 hover:text-violet-300 transition-colors w-full text-center">
+                    View all notifications
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
