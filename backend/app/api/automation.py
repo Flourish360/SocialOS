@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends
 from ..api.deps import get_current_user
 from ..models.user import User
 from ..mock.data import MOCK_AUTOMATIONS, MOCK_INBOX, MOCK_COMPETITORS
+from ..core.config import settings
 
 router = APIRouter(prefix="/automation", tags=["automation"])
 
 
 @router.get("/rules")
 def list_rules(current_user: User = Depends(get_current_user)):
-    return MOCK_AUTOMATIONS
+    return MOCK_AUTOMATIONS if settings.USE_MOCK_DATA else []
 
 
 @router.post("/rules", status_code=201)
@@ -29,6 +30,8 @@ def toggle_rule(rule_id: str, current_user: User = Depends(get_current_user)):
 
 @router.get("/inbox")
 def unified_inbox(priority: str | None = None, current_user: User = Depends(get_current_user)):
+    if not settings.USE_MOCK_DATA:
+        return []
     msgs = MOCK_INBOX
     if priority:
         msgs = [m for m in msgs if m["priority"] == priority]
@@ -45,4 +48,4 @@ def reply_to_message(message_id: str, body: dict, current_user: User = Depends(g
 
 @router.get("/competitors")
 def list_competitors(current_user: User = Depends(get_current_user)):
-    return MOCK_COMPETITORS
+    return MOCK_COMPETITORS if settings.USE_MOCK_DATA else []
