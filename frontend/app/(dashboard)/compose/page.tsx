@@ -61,6 +61,13 @@ export default function ComposePage() {
       if (t) setTemplates(JSON.parse(t));
       const g = localStorage.getItem(STORAGE_GROUPS_KEY);
       if (g) setHashtagGroups(JSON.parse(g));
+      const prefill = sessionStorage.getItem("compose_prefill_media");
+      if (prefill) {
+        const item = JSON.parse(prefill);
+        setAttachedMedia(item);
+        setAttachedMediaList([item]);
+        sessionStorage.removeItem("compose_prefill_media");
+      }
     } catch {}
   }, []);
 

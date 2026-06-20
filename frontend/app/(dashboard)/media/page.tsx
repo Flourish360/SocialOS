@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import { Upload, Search, Image, Film, FileText, Sparkles, Plus, X, Download, ExternalLink, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,10 +29,10 @@ interface PreviewModalProps {
   item: MediaItem;
   onClose: () => void;
   onDelete: (id: string) => void;
-  onUseInCompose?: (url: string) => void;
+  onUseInCompose: (item: MediaItem) => void;
 }
 
-function PreviewModal({ item, onClose, onDelete }: PreviewModalProps) {
+function PreviewModal({ item, onClose, onDelete, onUseInCompose }: PreviewModalProps) {
   const Icon = TYPE_ICONS[item.type] ?? Image;
   return (
     <>
@@ -93,7 +94,7 @@ function PreviewModal({ item, onClose, onDelete }: PreviewModalProps) {
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
             <button
-              onClick={() => { toast.success("Added to Compose!"); onClose(); }}
+              onClick={() => { onUseInCompose(item); }}
               className="btn-primary flex items-center gap-1.5 text-sm"
             >
               <Check className="w-3.5 h-3.5" /> Use in Compose
@@ -107,6 +108,14 @@ function PreviewModal({ item, onClose, onDelete }: PreviewModalProps) {
 
 export default function MediaPage() {
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const router = useRouter();
+
+  const useInCompose = (item: MediaItem) => {
+    if (!item.url) { toast.error("No URL for this media"); return; }
+    sessionStorage.setItem("compose_prefill_media", JSON.stringify({ id: item.id, url: item.url, type: item.type }));
+    toast.success(`${item.name} attached`);
+    router.push("/compose");
+  };
 
   useEffect(() => {
     mediaApi.list().then((items: any[]) => {
@@ -304,6 +313,7 @@ export default function MediaPage() {
         <PreviewModal
           item={preview}
           onClose={() => setPreview(null)}
+          onUseInCompose={useInCompose}
           onDelete={async (id) => {
             try { await mediaApi.delete(id); } catch {}
             setMedia((prev) => prev.filter((m) => m.id !== id));
