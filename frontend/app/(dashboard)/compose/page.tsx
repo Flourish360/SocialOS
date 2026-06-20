@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { Sparkles, Hash, Smile, Image, Send, Calendar, Loader2, CheckCircle, Wand2, Save, FolderOpen, X } from "lucide-react";
-import { aiApi, postsApi } from "@/lib/api";
+import { aiApi, postsApi, mediaApi } from "@/lib/api";
 import toast from "react-hot-toast";
 import { cn, PLATFORM_COLORS } from "@/lib/utils";
 import ScheduleModal from "@/components/ScheduleModal";
@@ -49,6 +49,9 @@ export default function ComposePage() {
   const [templateName, setTemplateName] = useState("");
   const [groupName, setGroupName] = useState("");
   const [showCaptionGen, setShowCaptionGen] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [mediaLibrary, setMediaLibrary] = useState<any[]>([]);
+  const [attachedMedia, setAttachedMedia] = useState<{ id: string; url: string; type: string } | null>(null);
 
   useEffect(() => {
     try {
@@ -164,7 +167,13 @@ export default function ComposePage() {
     if (!selectedPlatforms.length) { toast.error("Select at least one platform"); return; }
     setPublishing(true);
     try {
-      await postsApi.create({ caption, hashtags, platform_account_ids: selectedPlatforms, media_type: "none" });
+      await postsApi.create({
+        caption,
+        hashtags,
+        platform_account_ids: selectedPlatforms,
+        media_type: attachedMedia?.type || "none",
+        media_url: attachedMedia?.url,
+      });
       // Simulate per-platform results (in production these come from the API response)
       const results = selectedPlatforms.map((p) => ({
         platform: p,
@@ -280,12 +289,37 @@ export default function ComposePage() {
                 />
               </div>
 
+              {attachedMedia && (
+                <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-3">
+                  {attachedMedia.type === "image" ? (
+                    <img src={attachedMedia.url} alt="attached" className="w-16 h-16 object-cover rounded-lg border border-slate-700" />
+                  ) : (
+                    <div className="w-16 h-16 flex items-center justify-center bg-slate-800 rounded-lg border border-slate-700 text-xs text-slate-400">{attachedMedia.type}</div>
+                  )}
+                  <div className="flex-1 text-xs text-slate-400">Media attached</div>
+                  <button onClick={() => setAttachedMedia(null)} className="text-slate-500 hover:text-red-400">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
               {/* Toolbar */}
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800">
                 <button onClick={() => setShowCaptionGen(true)} className="btn-ghost flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300">
                   <Sparkles className="w-3.5 h-3.5" />Generate
                 </button>
-                <button className="btn-ghost flex items-center gap-1.5 text-xs"><Image className="w-3.5 h-3.5" />Media</button>
+                <button
+                  onClick={async () => {
+                    setShowMediaPicker(true);
+                    try {
+                      const items = await mediaApi.list();
+                      setMediaLibrary(items);
+                    } catch { toast.error("Failed to load media"); }
+                  }}
+                  className="btn-ghost flex items-center gap-1.5 text-xs"
+                >
+                  <Image className="w-3.5 h-3.5" />Media
+                </button>
                 <button onClick={suggestHashtags} disabled={hashtagLoading} className="btn-ghost flex items-center gap-1.5 text-xs">
                   {hashtagLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Hash className="w-3.5 h-3.5" />}
                   Hashtags
@@ -511,6 +545,45 @@ export default function ComposePage() {
         onClose={() => setShowResults(false)}
         results={publishResults}
       />
+
+      {showMediaPicker && (
+        <>
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50" onClick={() => setShowMediaPicker(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[80vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+              <p className="text-sm font-medium text-white">Choose media</p>
+              <button onClick={() => setShowMediaPicker(false)} className="text-slate-500 hover:text-slate-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              {mediaLibrary.length === 0 ? (
+                <p className="text-center text-sm text-slate-500 py-10">No media uploaded yet. Go to Media → upload some files first.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {mediaLibrary.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setAttachedMedia({ id: m.id, url: m.public_url, type: m.type });
+                        setShowMediaPicker(false);
+                        toast.success("Media attached");
+                      }}
+                      className="aspect-square rounded-xl border border-slate-700 hover:border-violet-500 overflow-hidden bg-slate-800 transition-all"
+                    >
+                      {m.public_url && m.type === "image" ? (
+                        <img src={m.public_url} alt={m.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs p-2">{m.name}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
