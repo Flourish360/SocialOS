@@ -80,6 +80,7 @@ export const aiApi = {
 };
 
 export const mediaApi = {
+  list: () => api.get("/media").then((r) => r.data),
   upload: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
@@ -87,7 +88,7 @@ export const mediaApi = {
       headers: { "Content-Type": "multipart/form-data" },
     }).then((r) => r.data);
   },
-  delete: (key: string) => api.delete(`/media/${key}`).then((r) => r.data),
+  delete: (id: string) => api.delete(`/media/${id}`).then((r) => r.data),
 };
 
 export const automationApi = {

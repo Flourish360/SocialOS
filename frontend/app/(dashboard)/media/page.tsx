@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { Upload, Search, Image, Film, FileText, Sparkles, Plus, X, Download, ExternalLink, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -104,7 +104,21 @@ function PreviewModal({ item, onClose, onDelete }: PreviewModalProps) {
 }
 
 export default function MediaPage() {
-  const [media, setMedia] = useState<MediaItem[]>(MOCK_MEDIA);
+  const [media, setMedia] = useState<MediaItem[]>([]);
+
+  useEffect(() => {
+    mediaApi.list().then((items: any[]) => {
+      setMedia(items.map((m) => ({
+        id: m.id,
+        name: m.name,
+        type: m.type,
+        sizeBytes: m.size_bytes || 0,
+        size: m.size_bytes > 1048576 ? `${(m.size_bytes / 1048576).toFixed(1)} MB` : `${Math.round((m.size_bytes || 0) / 1024)} KB`,
+        tags: [m.type],
+        url: m.public_url,
+      })));
+    }).catch(() => {});
+  }, []);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -129,9 +143,9 @@ export default function MediaPage() {
       const results = await Promise.all(arr.map((file) => mediaApi.upload(file)));
       results.forEach((res, i) => {
         const file = arr[i];
-        const type = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
+        const type = res.type || (file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document");
         const newItem: MediaItem = {
-          id: res.key || `local-${Date.now()}-${i}`,
+          id: res.id || res.key || `local-${Date.now()}-${i}`,
           name: file.name,
           type,
           size: file.size > 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.round(file.size / 1024)} KB`,
@@ -286,7 +300,10 @@ export default function MediaPage() {
         <PreviewModal
           item={preview}
           onClose={() => setPreview(null)}
-          onDelete={(id) => setMedia((prev) => prev.filter((m) => m.id !== id))}
+          onDelete={async (id) => {
+            try { await mediaApi.delete(id); } catch {}
+            setMedia((prev) => prev.filter((m) => m.id !== id));
+          }}
         />
       )}
     </div>
