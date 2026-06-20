@@ -10,6 +10,11 @@ from .scheduler import scheduler
 
 try:
     Base.metadata.create_all(bind=engine)
+    # Lightweight idempotent migrations for added columns (Postgres only).
+    if engine.dialect.name == "postgresql":
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS platform_post_ids JSONB DEFAULT '{}'::jsonb"))
 except Exception as e:
     import logging
     logging.getLogger(__name__).error("DB table creation failed: %s", e)

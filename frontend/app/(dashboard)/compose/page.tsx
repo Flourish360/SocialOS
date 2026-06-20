@@ -53,6 +53,7 @@ export default function ComposePage() {
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [mediaLibrary, setMediaLibrary] = useState<any[]>([]);
   const [attachedMedia, setAttachedMedia] = useState<{ id: string; url: string; type: string } | null>(null);
+  const [attachedMediaList, setAttachedMediaList] = useState<{ id: string; url: string; type: string }[]>([]);
 
   useEffect(() => {
     try {
@@ -168,12 +169,14 @@ export default function ComposePage() {
     if (!selectedPlatforms.length) { toast.error("Select at least one platform"); return; }
     setPublishing(true);
     try {
+      const allMedia = attachedMediaList.length > 0 ? attachedMediaList : (attachedMedia ? [attachedMedia] : []);
       const res = await postsApi.create({
         caption,
         hashtags,
         platform_account_ids: selectedPlatforms,
-        media_type: attachedMedia?.type || "none",
-        media_url: attachedMedia?.url,
+        media_type: allMedia.length > 1 ? "carousel" : (allMedia[0]?.type || "none"),
+        media_url: allMedia[0]?.url,
+        media_urls: allMedia.map((m) => m.url),
       });
       setLastPostId(res.id);
       const results = res.publish_results?.length ? res.publish_results : selectedPlatforms.map((p: string) => ({
@@ -184,7 +187,7 @@ export default function ComposePage() {
       results.forEach((r: { success: boolean; error?: string }) => { if (!r.success && !r.error) r.error = "Rate limit reached - retry in 15 min"; });
       setPublishResults(results);
       setShowResults(true);
-      if (results.every((r: { success: boolean }) => r.success)) { setCaption(""); setHashtags([]); setAttachedMedia(null); }
+      if (results.every((r: { success: boolean }) => r.success)) { setCaption(""); setHashtags([]); setAttachedMedia(null); setAttachedMediaList([]); }
     } catch {
       toast.error("Publish failed");
     } finally {
@@ -290,15 +293,17 @@ export default function ComposePage() {
                 />
               </div>
 
-              {attachedMedia && (
+              {(attachedMediaList.length > 0 || attachedMedia) && (
                 <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-3">
-                  {attachedMedia.type === "image" ? (
-                    <img src={attachedMedia.url} alt="attached" className="w-16 h-16 object-cover rounded-lg border border-slate-700" />
-                  ) : (
-                    <div className="w-16 h-16 flex items-center justify-center bg-slate-800 rounded-lg border border-slate-700 text-xs text-slate-400">{attachedMedia.type}</div>
-                  )}
-                  <div className="flex-1 text-xs text-slate-400">Media attached</div>
-                  <button onClick={() => setAttachedMedia(null)} className="text-slate-500 hover:text-red-400">
+                  <div className="flex gap-2 flex-1 overflow-x-auto">
+                    {(attachedMediaList.length > 0 ? attachedMediaList : [attachedMedia!]).map((m) => (
+                      <img key={m.id} src={m.url} alt="attached" className="w-16 h-16 object-cover rounded-lg border border-slate-700 shrink-0" />
+                    ))}
+                  </div>
+                  <div className="text-xs text-slate-400 shrink-0">
+                    {attachedMediaList.length > 1 ? `Carousel (${attachedMediaList.length})` : "Attached"}
+                  </div>
+                  <button onClick={() => { setAttachedMedia(null); setAttachedMediaList([]); }} className="text-slate-500 hover:text-red-400 shrink-0">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -556,33 +561,64 @@ export default function ComposePage() {
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50" onClick={() => setShowMediaPicker(false)} />
           <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[80vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-              <p className="text-sm font-medium text-white">Choose media</p>
-              <button onClick={() => setShowMediaPicker(false)} className="text-slate-500 hover:text-slate-300">
-                <X className="w-4 h-4" />
-              </button>
+              <div>
+                <p className="text-sm font-medium text-white">Choose media</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {attachedMediaList.length > 0
+                    ? `${attachedMediaList.length} selected${attachedMediaList.length > 1 ? " (carousel)" : ""}`
+                    : "Click to select. Pick 2–10 for a carousel."}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowMediaPicker(false); toast.success("Media attached"); }}
+                  className="btn-primary text-sm"
+                  disabled={attachedMediaList.length === 0}
+                >
+                  Done
+                </button>
+                <button onClick={() => setShowMediaPicker(false)} className="text-slate-500 hover:text-slate-300">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="p-5 overflow-y-auto">
               {mediaLibrary.length === 0 ? (
                 <p className="text-center text-sm text-slate-500 py-10">No media uploaded yet. Go to Media → upload some files first.</p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {mediaLibrary.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        setAttachedMedia({ id: m.id, url: m.public_url, type: m.type });
-                        setShowMediaPicker(false);
-                        toast.success("Media attached");
-                      }}
-                      className="aspect-square rounded-xl border border-slate-700 hover:border-violet-500 overflow-hidden bg-slate-800 transition-all"
-                    >
-                      {m.public_url && m.type === "image" ? (
-                        <img src={m.public_url} alt={m.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs p-2">{m.name}</div>
-                      )}
-                    </button>
-                  ))}
+                  {mediaLibrary.map((m) => {
+                    const isSelected = attachedMediaList.some((a) => a.id === m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => {
+                          const item = { id: m.id, url: m.public_url, type: m.type };
+                          if (isSelected) {
+                            setAttachedMediaList((prev) => prev.filter((a) => a.id !== m.id));
+                          } else {
+                            setAttachedMediaList((prev) => [...prev, item]);
+                            if (!attachedMedia) setAttachedMedia(item);
+                          }
+                        }}
+                        className={cn(
+                          "relative aspect-square rounded-xl border-2 overflow-hidden bg-slate-800 transition-all",
+                          isSelected ? "border-violet-500" : "border-slate-700 hover:border-violet-500/50",
+                        )}
+                      >
+                        {m.public_url && m.type === "image" ? (
+                          <img src={m.public_url} alt={m.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs p-2">{m.name}</div>
+                        )}
+                        {isSelected && (
+                          <div className="absolute top-1.5 right-1.5 bg-violet-600 rounded-full w-6 h-6 flex items-center justify-center text-white text-xs font-bold">
+                            {attachedMediaList.findIndex((a) => a.id === m.id) + 1}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

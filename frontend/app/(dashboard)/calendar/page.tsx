@@ -114,10 +114,15 @@ export default function CalendarPage() {
     if (!selectedPost) return;
     setDeleting(true);
     try {
-      await postsApi.delete(selectedPost.id);
+      const res: any = await postsApi.delete(selectedPost.id);
       setPosts((prev) => prev.filter((p) => p.id !== selectedPost.id));
       setSelectedPost(null);
-      toast.success("Post deleted");
+      const note = res?.data?.note || res?.note;
+      if (note) {
+        toast.success(note, { duration: 8000 });
+      } else {
+        toast.success("Post deleted");
+      }
     } catch {
       toast.error("Failed to delete");
     } finally {

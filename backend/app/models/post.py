@@ -23,6 +23,9 @@ class Post(Base):
     # Denormalized platform list for quick querying without joining platform_targets
     platform_account_ids = Column(JSON, default=list)
 
+    # Maps platform name → published post ID on that platform (e.g. {"instagram": "17841..."})
+    platform_post_ids = Column(JSON, default=dict)
+
     # AI metadata
     ai_generated = Column(Boolean, default=False)
     predicted_engagement_score = Column(Float, nullable=True)

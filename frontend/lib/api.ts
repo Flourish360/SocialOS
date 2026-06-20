@@ -57,7 +57,7 @@ export const postsApi = {
   list: (status?: string) => api.get(`/posts${status ? `?status=${status}` : ""}`).then((r) => r.data),
   create: (body: Record<string, unknown>) => api.post("/posts", body).then((r) => r.data),
   update: (id: string, body: Record<string, unknown>) => api.patch(`/posts/${id}`, body).then((r) => r.data),
-  delete: (id: string) => api.delete(`/posts/${id}`),
+  delete: (id: string) => api.delete(`/posts/${id}`).then((r) => r.data),
   analytics: (id: string) => api.get(`/posts/${id}/analytics`).then((r) => r.data),
   addToQueue: (body: Record<string, unknown>) => api.post("/posts/queue", body).then((r) => r.data),
   retry: (id: string) => api.post(`/posts/${id}/retry`).then((r) => r.data),

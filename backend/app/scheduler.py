@@ -21,7 +21,6 @@ def _publish_due_posts():
 
         for post in due:
             full_caption = post.caption + ("\n\n" + " ".join(post.hashtags) if post.hashtags else "")
-            media_url = post.media_urls[0] if post.media_urls else None
             any_success = False
 
             for platform in (post.platform_account_ids or []):
@@ -39,10 +38,15 @@ def _publish_due_posts():
                         access_token=account.access_token,
                         ig_user_id=account.platform_user_id,
                         caption=full_caption,
-                        media_url=media_url,
+                        media_urls=post.media_urls or [],
+                        media_type=post.media_type or "image",
                     )
                     if result.get("success"):
                         any_success = True
+                        if result.get("post_id"):
+                            ids = dict(post.platform_post_ids or {})
+                            ids["instagram"] = result["post_id"]
+                            post.platform_post_ids = ids
                         logger.info("Scheduled post %s published to Instagram: %s", post.id, result.get("post_id"))
                     else:
                         logger.warning("Scheduled post %s failed on Instagram: %s", post.id, result.get("error"))

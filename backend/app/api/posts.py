@@ -8,7 +8,7 @@ from ..models.social_account import SocialAccount
 from ..schemas.post import PostCreate, PostUpdate
 from ..mock.data import MOCK_POSTS
 from ..core.config import settings
-from ..services.publishers import publish_to_instagram
+from ..services.publishers import publish_to_instagram, fetch_instagram_insights
 from datetime import datetime
 import uuid, random
 
@@ -55,7 +55,49 @@ def list_posts(
 
 
 @router.get("/{post_id}/analytics")
-def post_analytics(post_id: str, current_user: User = Depends(get_current_user)):
+def post_analytics(
+    post_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Try real Instagram insights first
+    if not settings.USE_MOCK_DATA:
+        post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
+        if post and post.platform_post_ids and post.platform_post_ids.get("instagram"):
+            ig_account = db.query(SocialAccount).filter(
+                SocialAccount.user_id == current_user.id,
+                SocialAccount.platform == "instagram",
+                SocialAccount.is_connected == True,
+            ).first()
+            if ig_account and ig_account.access_token:
+                ig_post_id = post.platform_post_ids["instagram"]
+                ins = fetch_instagram_insights(
+                    access_token=ig_account.access_token,
+                    media_id=ig_post_id,
+                    media_type=post.media_type or "image",
+                )
+                impressions = ins["impressions"]
+                reach = ins["reach"]
+                likes = ins["likes"]
+                comments = ins["comments"]
+                saves = ins["saves"]
+                shares = ins["shares"]
+                eng_rate = round(((likes + comments + saves + shares) / max(reach, 1)) * 100, 2)
+                return {
+                    "post_id": post_id,
+                    "impressions": impressions,
+                    "reach": reach,
+                    "likes": likes,
+                    "comments": comments,
+                    "saves": saves,
+                    "shares": shares,
+                    "engagement_rate": eng_rate,
+                    "real": True,
+                    "source": "instagram_graph_api",
+                    "platform_post_id": ig_post_id,
+                }
+
+    # Fallback to mock for unpublished posts or posts without Instagram ID
     rng = random.Random(sum(ord(c) for c in post_id))
     impressions = rng.randint(1200, 45000)
     reach = int(impressions * rng.uniform(0.55, 0.85))
@@ -141,10 +183,14 @@ def create_post(
 
     media_urls = body.media_urls or ([body.media_url] if body.media_url else [])
     full_caption = body.caption + ("\n\n" + " ".join(body.hashtags) if body.hashtags else "")
+    # Auto-detect carousel if multiple images given
+    effective_type = body.media_type
+    if effective_type == "image" and len(media_urls) > 1:
+        effective_type = "carousel"
 
     publish_results: list[dict] = []
+    platform_post_ids: dict[str, str] = {}
     if not body.scheduled_at:
-        # Publish immediately to each selected platform
         for platform in body.platform_account_ids:
             account = db.query(SocialAccount).filter(
                 SocialAccount.user_id == current_user.id,
@@ -160,8 +206,11 @@ def create_post(
                     access_token=account.access_token,
                     ig_user_id=account.platform_user_id,
                     caption=full_caption,
-                    media_url=body.media_url or (media_urls[0] if media_urls else None),
+                    media_urls=media_urls,
+                    media_type=effective_type,
                 )
+                if result.get("success") and result.get("post_id"):
+                    platform_post_ids["instagram"] = result["post_id"]
                 publish_results.append({"platform": "instagram", **result})
             else:
                 publish_results.append({"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"})
@@ -175,11 +224,12 @@ def create_post(
         caption=body.caption,
         hashtags=body.hashtags,
         media_urls=media_urls,
-        media_type=body.media_type,
+        media_type=effective_type,
         status=status,
         scheduled_at=body.scheduled_at,
         published_at=datetime.utcnow() if any_success else None,
         platform_account_ids=body.platform_account_ids,
+        platform_post_ids=platform_post_ids,
         ai_generated=False,
         predicted_engagement_score=random.randint(60, 95),
         sentiment="positive",
@@ -204,7 +254,6 @@ def retry_post(
         raise HTTPException(404, "Post not found")
 
     full_caption = post.caption + ("\n\n" + " ".join(post.hashtags) if post.hashtags else "")
-    media_url = post.media_urls[0] if post.media_urls else None
 
     publish_results: list[dict] = []
     for platform in (post.platform_account_ids or []):
@@ -222,8 +271,13 @@ def retry_post(
                 access_token=account.access_token,
                 ig_user_id=account.platform_user_id,
                 caption=full_caption,
-                media_url=media_url,
+                media_urls=post.media_urls or [],
+                media_type=post.media_type or "image",
             )
+            if result.get("success") and result.get("post_id"):
+                ids = dict(post.platform_post_ids or {})
+                ids["instagram"] = result["post_id"]
+                post.platform_post_ids = ids
             publish_results.append({"platform": "instagram", **result})
         else:
             publish_results.append({"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"})
@@ -326,18 +380,28 @@ def update_post(
     return _post_to_dict(post)
 
 
-@router.delete("/{post_id}", status_code=204)
+@router.delete("/{post_id}")
 def delete_post(
     post_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Delete from SocialOS. Note: Instagram Graph API does NOT support deleting
+    published posts — users must delete those manually in the Instagram app."""
     if settings.USE_MOCK_DATA:
         global MOCK_POSTS
         MOCK_POSTS = [p for p in MOCK_POSTS if p["id"] != post_id]
-        return
+        return {"deleted": True, "note": "Removed from SocialOS only — mock mode"}
 
     post = db.query(Post).filter(Post.id == post_id, Post.user_id == current_user.id).first()
-    if post:
-        db.delete(post)
-        db.commit()
+    if not post:
+        raise HTTPException(404, "Post not found")
+
+    was_published_to_instagram = bool(post.platform_post_ids and post.platform_post_ids.get("instagram"))
+    db.delete(post)
+    db.commit()
+
+    note = None
+    if was_published_to_instagram:
+        note = "Removed from SocialOS. Instagram does not allow deleting published posts via API — delete it manually in the Instagram app if needed."
+    return {"deleted": True, "id": post_id, "note": note}
