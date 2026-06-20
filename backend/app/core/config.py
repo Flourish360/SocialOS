@@ -14,10 +14,9 @@ class Settings(BaseSettings):
 
     ANTHROPIC_API_KEY: Optional[str] = None
 
-    AWS_ACCESS_KEY_ID: Optional[str] = None
-    AWS_SECRET_ACCESS_KEY: Optional[str] = None
-    AWS_S3_BUCKET: Optional[str] = None
-    AWS_REGION: str = "us-east-1"
+    CLOUDINARY_CLOUD_NAME: Optional[str] = None
+    CLOUDINARY_API_KEY: Optional[str] = None
+    CLOUDINARY_API_SECRET: Optional[str] = None
 
     SENDGRID_API_KEY: Optional[str] = None
 
