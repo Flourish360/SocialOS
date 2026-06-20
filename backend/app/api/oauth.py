@@ -125,10 +125,28 @@ async def instagram_callback(code: str, state: str = "", db: Session = Depends(g
     if "access_token" not in data:
         return RedirectResponse(_error_redirect("token_exchange_failed"))
 
+    short_token = data["access_token"]
+    user_id = str(data.get("user_id", ""))
+
+    # Exchange short-lived (1h) token for long-lived (60 days) token
+    long_token = short_token
+    async with httpx.AsyncClient() as client:
+        long_resp = await client.get(
+            "https://graph.instagram.com/access_token",
+            params={
+                "grant_type": "ig_exchange_token",
+                "client_secret": settings.INSTAGRAM_CLIENT_SECRET,
+                "access_token": short_token,
+            },
+        )
+        long_data = long_resp.json()
+        if "access_token" in long_data:
+            long_token = long_data["access_token"]
+
     _upsert_account(
         db, state, "instagram",
-        access_token=data["access_token"],
-        platform_user_id=str(data.get("user_id", "")),
+        access_token=long_token,
+        platform_user_id=user_id,
     )
     return RedirectResponse(_settings_redirect("instagram"))
 
