@@ -65,6 +65,7 @@ export const postsApi = {
 
 export const accountsApi = {
   list: () => api.get("/accounts").then((r) => r.data),
+  sync: () => api.post("/accounts/sync").then((r) => r.data),
   oauthUrl: (platform: string) => api.get(`/oauth/${platform}/url`).then((r) => r.data),
   disconnect: (id: string) => api.delete(`/accounts/${id}`),
 };
