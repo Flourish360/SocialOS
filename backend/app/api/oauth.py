@@ -143,11 +143,16 @@ async def instagram_callback(code: str, state: str = "", db: Session = Depends(g
         if "access_token" in long_data:
             long_token = long_data["access_token"]
 
-    _upsert_account(
+    account = _upsert_account(
         db, state, "instagram",
         access_token=long_token,
         platform_user_id=user_id,
     )
+
+    # Fetch real follower count right away so the dashboard shows live data
+    from ..services.instagram_sync import sync_instagram_account
+    sync_instagram_account(db, account)
+
     return RedirectResponse(_settings_redirect("instagram"))
 
 

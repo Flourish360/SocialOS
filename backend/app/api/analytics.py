@@ -4,6 +4,7 @@ from ..api.deps import get_current_user
 from ..db.database import get_db
 from ..models.user import User
 from ..models.post import Post
+from ..models.social_account import SocialAccount
 from ..schemas.analytics import NLQRequest, NLQResponse
 from ..mock.data import (
     MOCK_DASHBOARD_SUMMARY, MOCK_PLATFORM_METRICS,
@@ -30,20 +31,27 @@ def dashboard_summary(
         Post.user_id == current_user.id,
         Post.status == "scheduled",
     ).count()
+    accounts = db.query(SocialAccount).filter(
+        SocialAccount.user_id == current_user.id,
+        SocialAccount.is_connected == True,
+    ).all()
 
     total_impressions = sum(p.total_impressions or 0 for p in published)
     total_reach = sum(p.total_reach or 0 for p in published)
     total_engagements = sum(p.total_engagements or 0 for p in published)
+    total_followers = sum(a.follower_count or 0 for a in accounts)
 
     return {
         "total_posts": len(published),
-        "scheduled_posts": scheduled,
+        "posts_scheduled": scheduled,
         "total_impressions": total_impressions,
         "total_reach": total_reach,
         "total_engagements": total_engagements,
-        "engagement_rate": round((total_engagements / max(total_reach, 1)) * 100, 2),
+        "total_followers": total_followers,
+        "avg_engagement_rate": round((total_engagements / max(total_reach, 1)) * 100, 2),
         "follower_growth_pct": 0,
         "top_platform": "instagram" if published else None,
+        "ai_insights": [],
     }
 
 
@@ -60,6 +68,11 @@ def platform_metrics(
         Post.user_id == current_user.id,
         Post.status == "published",
     ).all()
+    accounts = db.query(SocialAccount).filter(
+        SocialAccount.user_id == current_user.id,
+        SocialAccount.is_connected == True,
+    ).all()
+    account_by_platform = {a.platform: a for a in accounts}
 
     by_platform: dict[str, dict] = {}
     for p in posts:
@@ -70,11 +83,21 @@ def platform_metrics(
                 "impressions": 0,
                 "reach": 0,
                 "engagements": 0,
+                "followers": 0,
+                "follower_growth": 0,
             })
             agg["posts"] += 1
             agg["impressions"] += p.total_impressions or 0
             agg["reach"] += p.total_reach or 0
             agg["engagements"] += p.total_engagements or 0
+
+    # Merge in real follower counts from connected accounts
+    for plat, acc in account_by_platform.items():
+        agg = by_platform.setdefault(plat, {
+            "platform": plat, "posts": 0, "impressions": 0,
+            "reach": 0, "engagements": 0, "followers": 0, "follower_growth": 0,
+        })
+        agg["followers"] = acc.follower_count or 0
 
     for agg in by_platform.values():
         agg["engagement_rate"] = round((agg["engagements"] / max(agg["reach"], 1)) * 100, 2)

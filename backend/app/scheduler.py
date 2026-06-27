@@ -64,5 +64,28 @@ def _publish_due_posts():
         db.close()
 
 
+def _sync_all_instagram_accounts():
+    from .db.database import SessionLocal
+    from .models.social_account import SocialAccount
+    from .services.instagram_sync import sync_instagram_account
+
+    db = SessionLocal()
+    try:
+        accounts = db.query(SocialAccount).filter(
+            SocialAccount.platform == "instagram",
+            SocialAccount.is_connected == True,
+        ).all()
+        for account in accounts:
+            sync_instagram_account(db, account)
+        if accounts:
+            logger.info("Synced %d Instagram account(s)", len(accounts))
+    except Exception:
+        logger.exception("Scheduler error during Instagram account sync")
+        db.rollback()
+    finally:
+        db.close()
+
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(_publish_due_posts, "interval", minutes=1, id="publish_scheduled_posts")
+scheduler.add_job(_sync_all_instagram_accounts, "interval", hours=1, id="sync_instagram_accounts")

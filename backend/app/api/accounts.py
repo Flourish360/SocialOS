@@ -25,6 +25,12 @@ def list_accounts(current_user: User = Depends(get_current_user), db: Session = 
             "handle": a.handle,
             "platform_user_id": a.platform_user_id,
             "is_connected": a.is_connected,
+            "follower_count": a.follower_count or 0,
+            "following_count": a.following_count or 0,
+            "post_count": a.post_count or 0,
+            "avg_engagement_rate": a.avg_engagement_rate or 0.0,
+            "health_score": a.health_score or 100.0,
+            "last_synced_at": a.last_synced_at.isoformat() if a.last_synced_at else None,
         }
         for a in accounts
     ]
