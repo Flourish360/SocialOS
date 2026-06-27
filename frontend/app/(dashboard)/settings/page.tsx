@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "@/components/layout/Header";
-import { accountsApi } from "@/lib/api";
+import { accountsApi, getErrorMessage } from "@/lib/api";
 import { CheckCircle, ExternalLink, Palette, Bell, Shield, Users, Mail, Loader2, Eye, EyeOff, Trash2, RefreshCw, AlertTriangle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -263,8 +263,8 @@ export default function SettingsPage() {
       await accountsApi.sync();
       await loadAccounts();
       toast.success("Stats refreshed from Instagram!");
-    } catch {
-      toast.error("Refresh failed");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Refresh failed — check your Instagram token"));
     } finally {
       setSyncing(false);
     }
