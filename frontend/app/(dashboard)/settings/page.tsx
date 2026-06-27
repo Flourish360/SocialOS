@@ -244,16 +244,31 @@ export default function SettingsPage() {
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const searchParams = useSearchParams();
 
-  const [accountInfo, setAccountInfo] = useState<Record<string, { handle?: string }>>({});
+  const [accountInfo, setAccountInfo] = useState<Record<string, { handle?: string; follower_count?: number; last_synced_at?: string }>>({});
+  const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => {
-    accountsApi.list().then((accounts: {platform: string; handle?: string}[]) => {
+  const loadAccounts = () =>
+    accountsApi.list().then((accounts: { platform: string; handle?: string; follower_count?: number; last_synced_at?: string }[]) => {
       setConnectedPlatforms(accounts.map((a) => a.platform));
-      const info: Record<string, { handle?: string }> = {};
-      accounts.forEach((a) => { info[a.platform] = { handle: a.handle }; });
+      const info: Record<string, { handle?: string; follower_count?: number; last_synced_at?: string }> = {};
+      accounts.forEach((a) => { info[a.platform] = { handle: a.handle, follower_count: a.follower_count, last_synced_at: a.last_synced_at }; });
       setAccountInfo(info);
     }).catch(() => {});
-  }, []);
+
+  useEffect(() => { loadAccounts(); }, []);
+
+  const refreshStats = async () => {
+    setSyncing(true);
+    try {
+      await accountsApi.sync();
+      await loadAccounts();
+      toast.success("Stats refreshed from Instagram!");
+    } catch {
+      toast.error("Refresh failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     const connected = searchParams.get("connected");
@@ -320,7 +335,19 @@ export default function SettingsPage() {
             <div className="max-w-xl space-y-3">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold text-white">Connected Platforms</h2>
-                <span className="text-xs text-slate-500">{connectedPlatforms.length} connected</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500">{connectedPlatforms.length} connected</span>
+                  {connectedPlatforms.length > 0 && (
+                    <button
+                      onClick={refreshStats}
+                      disabled={syncing}
+                      className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("w-3 h-3", syncing && "animate-spin")} />
+                      {syncing ? "Syncing…" : "Refresh Stats"}
+                    </button>
+                  )}
+                </div>
               </div>
               {PLATFORMS_CONNECT.map((p) => {
                 const connected = connectedPlatforms.includes(p.id);
@@ -345,7 +372,12 @@ export default function SettingsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white">{p.label}</p>
                         {connected && accountInfo[p.id]?.handle ? (
-                          <p className="text-xs text-slate-400 mt-0.5">@{accountInfo[p.id]?.handle}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {accountInfo[p.id]?.handle}
+                            {accountInfo[p.id]?.follower_count ? (
+                              <span className="ml-2 text-slate-500">· {accountInfo[p.id]?.follower_count?.toLocaleString()} followers</span>
+                            ) : null}
+                          </p>
                         ) : (
                           <p className="text-xs text-slate-500">{p.description}</p>
                         )}

@@ -36,6 +36,12 @@ def dashboard_summary(
         SocialAccount.is_connected == True,
     ).all()
 
+    # Sync any Instagram account that has never fetched live data
+    from ..services.instagram_sync import sync_instagram_account
+    for a in accounts:
+        if a.platform == "instagram" and a.last_synced_at is None:
+            sync_instagram_account(db, a)
+
     total_impressions = sum(p.total_impressions or 0 for p in published)
     total_reach = sum(p.total_reach or 0 for p in published)
     total_engagements = sum(p.total_engagements or 0 for p in published)

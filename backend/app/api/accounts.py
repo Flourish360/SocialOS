@@ -46,7 +46,7 @@ def list_accounts(current_user: User = Depends(get_current_user), db: Session = 
 
 @router.post("/sync")
 def sync_accounts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Force-refresh cached stats for all connected accounts."""
+    """Force-refresh cached stats for all connected Instagram accounts."""
     from ..services.instagram_sync import sync_instagram_account
     accounts = db.query(SocialAccount).filter(
         SocialAccount.user_id == current_user.id,
@@ -57,7 +57,7 @@ def sync_accounts(current_user: User = Depends(get_current_user), db: Session = 
     for a in accounts:
         if sync_instagram_account(db, a):
             synced += 1
-    return {"synced": synced}
+    return {"synced": synced, "accounts": [_serialize(a) for a in accounts]}
 
 
 @router.delete("/{account_id}")
