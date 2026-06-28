@@ -35,7 +35,7 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
         "twitter": (
             f"https://twitter.com/i/oauth2/authorize"
             f"?response_type=code&client_id={settings.TWITTER_CLIENT_ID}"
-            f"&redirect_uri={settings.FRONTEND_URL}/api/oauth/twitter/callback"
+            f"&redirect_uri={TWITTER_CALLBACK}"
             f"&scope=tweet.read+tweet.write+users.read+offline.access+media.write"
             f"&state={uid}&code_challenge=challenge&code_challenge_method=plain"
         ) if settings.TWITTER_CLIENT_ID else None,
@@ -158,16 +158,18 @@ async def instagram_callback(code: str, state: str = "", db: Session = Depends(g
 
 # ── Twitter / X ───────────────────────────────────────────────────────────────
 
+TWITTER_CALLBACK = "https://socialos-production-1712.up.railway.app/api/oauth/twitter/callback"
+
+
 @router.get("/twitter")
 def twitter_auth(current_user: User = Depends(get_current_user)):
     if not settings.TWITTER_CLIENT_ID:
-        raise HTTPException(400, "TWITTER_CLIENT_ID not configured — add it to backend/.env")
-    redirect_uri = f"{settings.FRONTEND_URL}/api/oauth/twitter/callback"
+        raise HTTPException(400, "TWITTER_CLIENT_ID not configured — add it to Railway variables")
     url = (
         f"https://twitter.com/i/oauth2/authorize"
         f"?response_type=code"
         f"&client_id={settings.TWITTER_CLIENT_ID}"
-        f"&redirect_uri={redirect_uri}"
+        f"&redirect_uri={TWITTER_CALLBACK}"
         f"&scope=tweet.read+tweet.write+users.read+offline.access+media.write"
         f"&state={current_user.id}"
         f"&code_challenge=challenge&code_challenge_method=plain"
@@ -183,7 +185,7 @@ async def twitter_callback(code: str, state: str = "", db: Session = Depends(get
     creds = base64.b64encode(
         f"{settings.TWITTER_CLIENT_ID}:{settings.TWITTER_CLIENT_SECRET}".encode()
     ).decode()
-    redirect_uri = f"{settings.FRONTEND_URL}/api/oauth/twitter/callback"
+    redirect_uri = TWITTER_CALLBACK
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://api.twitter.com/2/oauth2/token",
