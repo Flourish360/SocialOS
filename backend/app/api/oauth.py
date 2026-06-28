@@ -36,7 +36,7 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
             f"https://twitter.com/i/oauth2/authorize"
             f"?response_type=code&client_id={settings.TWITTER_CLIENT_ID}"
             f"&redirect_uri={settings.FRONTEND_URL}/api/oauth/twitter/callback"
-            f"&scope=tweet.read+tweet.write+users.read+offline.access"
+            f"&scope=tweet.read+tweet.write+users.read+offline.access+media.write"
             f"&state={uid}&code_challenge=challenge&code_challenge_method=plain"
         ) if settings.TWITTER_CLIENT_ID else None,
         "linkedin": (
@@ -168,7 +168,7 @@ def twitter_auth(current_user: User = Depends(get_current_user)):
         f"?response_type=code"
         f"&client_id={settings.TWITTER_CLIENT_ID}"
         f"&redirect_uri={redirect_uri}"
-        f"&scope=tweet.read+tweet.write+users.read+offline.access"
+        f"&scope=tweet.read+tweet.write+users.read+offline.access+media.write"
         f"&state={current_user.id}"
         f"&code_challenge=challenge&code_challenge_method=plain"
     )

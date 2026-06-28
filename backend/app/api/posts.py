@@ -8,7 +8,7 @@ from ..models.social_account import SocialAccount
 from ..schemas.post import PostCreate, PostUpdate
 from ..mock.data import MOCK_POSTS
 from ..core.config import settings
-from ..services.publishers import publish_to_instagram, fetch_instagram_insights
+from ..services.publishers import publish_to_instagram, publish_to_twitter, fetch_instagram_insights
 from datetime import datetime
 import uuid, random
 
@@ -218,6 +218,15 @@ def create_post(
                 if result.get("success") and result.get("post_id"):
                     platform_post_ids["instagram"] = result["post_id"]
                 publish_results.append({"platform": "instagram", **result})
+            elif platform == "twitter":
+                result = publish_to_twitter(
+                    access_token=account.access_token,
+                    caption=full_caption,
+                    media_urls=media_urls,
+                )
+                if result.get("success") and result.get("post_id"):
+                    platform_post_ids["twitter"] = result["post_id"]
+                publish_results.append({"platform": "twitter", **result})
             else:
                 publish_results.append({"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"})
 
@@ -285,6 +294,17 @@ def retry_post(
                 ids["instagram"] = result["post_id"]
                 post.platform_post_ids = ids
             publish_results.append({"platform": "instagram", **result})
+        elif platform == "twitter":
+            result = publish_to_twitter(
+                access_token=account.access_token,
+                caption=full_caption,
+                media_urls=post.media_urls or [],
+            )
+            if result.get("success") and result.get("post_id"):
+                ids = dict(post.platform_post_ids or {})
+                ids["twitter"] = result["post_id"]
+                post.platform_post_ids = ids
+            publish_results.append({"platform": "twitter", **result})
         else:
             publish_results.append({"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"})
 

@@ -145,6 +145,71 @@ def publish_to_instagram(
         return {"success": False, "error": str(e)}
 
 
+def _upload_twitter_media(access_token: str, media_url: str) -> str | None:
+    """Download media from a URL and upload it to Twitter. Returns media_id_string or None."""
+    try:
+        with httpx.Client(timeout=60) as client:
+            dl = client.get(media_url)
+            dl.raise_for_status()
+            content_type = dl.headers.get("content-type", "image/jpeg")
+            resp = client.post(
+                "https://upload.twitter.com/1.1/media/upload.json",
+                headers={"Authorization": f"Bearer {access_token}"},
+                files={"media": ("media", dl.content, content_type)},
+            )
+            data = resp.json()
+            if "media_id_string" in data:
+                return data["media_id_string"]
+            log.warning("Twitter media upload error: %s", data)
+    except Exception as e:
+        log.warning("Twitter media upload failed for %s: %s", media_url, e)
+    return None
+
+
+def publish_to_twitter(
+    access_token: str,
+    caption: str,
+    media_urls: list[str] | None = None,
+) -> dict:
+    """Publish a tweet via Twitter API v2.
+
+    Supports text-only and image tweets (up to 4 images).
+    Caption is truncated to 280 characters.
+    Returns {"success": True, "post_id": "..."} or {"success": False, "error": "..."}.
+    """
+    text = caption if len(caption) <= 280 else caption[:277] + "..."
+
+    media_ids: list[str] = []
+    for url in (media_urls or [])[:4]:
+        mid = _upload_twitter_media(access_token, url)
+        if mid:
+            media_ids.append(mid)
+
+    payload: dict = {"text": text}
+    if media_ids:
+        payload["media"] = {"media_ids": media_ids}
+
+    try:
+        with httpx.Client(timeout=30) as client:
+            resp = client.post(
+                "https://api.twitter.com/2/tweets",
+                json=payload,
+                headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            )
+            data = resp.json()
+
+        if "data" in data and "id" in data["data"]:
+            return {"success": True, "post_id": data["data"]["id"]}
+
+        errors = data.get("errors", [])
+        detail = data.get("detail", "")
+        error_msg = detail or (errors[0].get("message") if errors else str(data))
+        return {"success": False, "error": error_msg}
+    except Exception as e:
+        log.warning("Twitter publish failed: %s", e)
+        return {"success": False, "error": str(e)}
+
+
 def fetch_instagram_insights(access_token: str, media_id: str, media_type: str = "image") -> dict:
     """Fetch real engagement metrics for a published Instagram post.
 
