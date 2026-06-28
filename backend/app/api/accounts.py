@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+import httpx
 from sqlalchemy.orm import Session
+
 from ..api.deps import get_current_user
 from ..db.database import get_db
 from ..models.user import User
 from ..models.social_account import SocialAccount
+from ..services.instagram_sync import sync_instagram_account
 from ..mock.data import MOCK_ACCOUNTS
 from ..core.config import settings
 
@@ -34,20 +37,41 @@ def list_accounts(current_user: User = Depends(get_current_user), db: Session = 
         SocialAccount.user_id == current_user.id,
         SocialAccount.is_connected == True,
     ).all()
-
-    # Auto-sync any Instagram account that has never been synced before
-    from ..services.instagram_sync import sync_instagram_account
     for a in accounts:
         if a.platform == "instagram" and a.last_synced_at is None:
             sync_instagram_account(db, a)
-
     return [_serialize(a) for a in accounts]
 
 
-@router.get("/debug/instagram")
+@router.post("/sync-stats")
+def sync_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Force-refresh cached Instagram stats from the Graph API."""
+    accounts = db.query(SocialAccount).filter(
+        SocialAccount.user_id == current_user.id,
+        SocialAccount.is_connected == True,
+        SocialAccount.platform == "instagram",
+    ).all()
+    if not accounts:
+        raise HTTPException(status_code=400, detail="No Instagram account connected")
+    errors = []
+    synced = 0
+    for a in accounts:
+        ok = sync_instagram_account(db, a)
+        if ok:
+            synced += 1
+        else:
+            errors.append(f"handle={a.handle} user_id={a.platform_user_id}")
+    if synced == 0:
+        detail = "Instagram sync failed"
+        if errors:
+            detail += f": {'; '.join(errors)}"
+        raise HTTPException(status_code=502, detail=detail)
+    return {"synced": synced, "accounts": [_serialize(a) for a in accounts]}
+
+
+@router.get("/debug-instagram")
 def debug_instagram(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Return raw Instagram API response so we can diagnose sync issues."""
-    import httpx
+    """Return DB state + raw Instagram API response to diagnose sync issues."""
     account = db.query(SocialAccount).filter(
         SocialAccount.user_id == current_user.id,
         SocialAccount.platform == "instagram",
@@ -55,11 +79,11 @@ def debug_instagram(current_user: User = Depends(get_current_user), db: Session 
     ).first()
     if not account:
         return {"error": "No Instagram account found in DB"}
-    result = {
-        "db_platform_user_id": account.platform_user_id,
-        "db_handle": account.handle,
-        "db_follower_count": account.follower_count,
-        "db_last_synced_at": account.last_synced_at.isoformat() if account.last_synced_at else None,
+    info = {
+        "platform_user_id": account.platform_user_id,
+        "handle": account.handle,
+        "follower_count": account.follower_count,
+        "last_synced_at": account.last_synced_at.isoformat() if account.last_synced_at else None,
         "has_token": bool(account.access_token),
         "token_length": len(account.access_token or ""),
     }
@@ -68,45 +92,13 @@ def debug_instagram(current_user: User = Depends(get_current_user), db: Session 
             with httpx.Client(timeout=15) as client:
                 resp = client.get(
                     f"https://graph.instagram.com/v21.0/{account.platform_user_id}",
-                    params={
-                        "fields": "username,followers_count,media_count",
-                        "access_token": account.access_token,
-                    },
+                    params={"fields": "username,followers_count,media_count", "access_token": account.access_token},
                 )
-                result["instagram_api_status"] = resp.status_code
-                result["instagram_api_response"] = resp.json()
+                info["api_status"] = resp.status_code
+                info["api_response"] = resp.json()
         except Exception as e:
-            result["instagram_api_error"] = str(e)
-    return result
-
-
-@router.post("/sync")
-def sync_accounts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Force-refresh cached stats for all connected Instagram accounts."""
-    from ..services.instagram_sync import sync_instagram_account
-    from fastapi import HTTPException
-    accounts = db.query(SocialAccount).filter(
-        SocialAccount.user_id == current_user.id,
-        SocialAccount.is_connected == True,
-        SocialAccount.platform == "instagram",
-    ).all()
-    if not accounts:
-        raise HTTPException(400, "No Instagram account connected")
-    synced = 0
-    errors = []
-    for a in accounts:
-        try:
-            ok = sync_instagram_account(db, a)
-            if ok:
-                synced += 1
-            else:
-                errors.append(f"Sync returned false for {a.handle} (user_id={a.platform_user_id})")
-        except Exception as e:
-            errors.append(str(e))
-    if synced == 0:
-        raise HTTPException(502, f"Instagram sync failed: {'; '.join(errors) or 'check token or user ID'}")
-    db.refresh(accounts[0])
-    return {"synced": synced, "accounts": [_serialize(a) for a in accounts]}
+            info["api_error"] = str(e)
+    return info
 
 
 @router.delete("/{account_id}")
