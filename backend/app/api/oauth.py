@@ -48,8 +48,8 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
         "tiktok": (
             f"https://www.tiktok.com/v2/auth/authorize"
             f"?client_key={settings.TIKTOK_CLIENT_ID}"
-            f"&response_type=code&scope=user.info.basic,video.publish"
-            f"&redirect_uri={settings.FRONTEND_URL}/api/oauth/tiktok/callback&state={uid}"
+            f"&response_type=code&scope=user.info.basic,video.upload,video.publish"
+            f"&redirect_uri={TIKTOK_CALLBACK}&state={uid}"
         ) if settings.TIKTOK_CLIENT_ID else None,
     }
     url = urls.get(platform)
@@ -269,17 +269,19 @@ async def linkedin_callback(code: str, state: str = "", db: Session = Depends(ge
 
 # ── TikTok ────────────────────────────────────────────────────────────────────
 
+TIKTOK_CALLBACK = "https://socialos-production-1712.up.railway.app/api/oauth/tiktok/callback"
+
+
 @router.get("/tiktok")
 def tiktok_auth(current_user: User = Depends(get_current_user)):
     if not settings.TIKTOK_CLIENT_ID:
-        raise HTTPException(400, "TIKTOK_CLIENT_ID not configured — add it to backend/.env")
-    redirect_uri = f"{settings.FRONTEND_URL}/api/oauth/tiktok/callback"
+        raise HTTPException(400, "TIKTOK_CLIENT_ID not configured — add it to Railway variables")
     url = (
         f"https://www.tiktok.com/v2/auth/authorize"
         f"?client_key={settings.TIKTOK_CLIENT_ID}"
         f"&response_type=code"
-        f"&scope=user.info.basic,video.publish"
-        f"&redirect_uri={redirect_uri}"
+        f"&scope=user.info.basic,video.upload,video.publish"
+        f"&redirect_uri={TIKTOK_CALLBACK}"
         f"&state={current_user.id}"
     )
     return RedirectResponse(url)
@@ -290,7 +292,7 @@ async def tiktok_callback(code: str, state: str = "", db: Session = Depends(get_
     if not state or not settings.TIKTOK_CLIENT_ID:
         return RedirectResponse(_error_redirect("oauth_failed"))
 
-    redirect_uri = f"{settings.FRONTEND_URL}/api/oauth/tiktok/callback"
+    redirect_uri = TIKTOK_CALLBACK
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://open.tiktokapis.com/v2/oauth/token/",
