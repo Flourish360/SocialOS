@@ -62,4 +62,4 @@ app.include_router(oauth.router, prefix="/api")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "mock_mode": settings.USE_MOCK_DATA, "scheduler": scheduler.running}
+    return {"status": "ok", "mock_mode": settings.USE_MOCK_DATA, "scheduler": scheduler.running, "version": "3a52ff7"}
