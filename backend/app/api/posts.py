@@ -10,6 +10,7 @@ from ..mock.data import MOCK_POSTS
 from ..core.config import settings
 from ..services.publishers import publish_to_instagram, publish_to_twitter, fetch_instagram_insights
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid, random
 
 router = APIRouter(prefix="/posts", tags=["posts"])
@@ -197,38 +198,37 @@ def create_post(
     publish_results: list[dict] = []
     platform_post_ids: dict[str, str] = {}
     if not body.scheduled_at:
-        for platform in body.platform_account_ids:
+        def _publish_one(platform: str) -> dict:
             account = db.query(SocialAccount).filter(
                 SocialAccount.user_id == current_user.id,
                 SocialAccount.platform == platform,
                 SocialAccount.is_connected == True,
             ).first()
             if not account or not account.access_token:
-                publish_results.append({"platform": platform, "success": False, "error": "Not connected"})
-                continue
-
+                return {"platform": platform, "success": False, "error": "Not connected"}
             if platform == "instagram":
-                result = publish_to_instagram(
+                return {"platform": platform, **publish_to_instagram(
                     access_token=account.access_token,
                     ig_user_id=account.platform_user_id,
                     caption=full_caption,
                     media_urls=media_urls,
                     media_type=effective_type,
-                )
-                if result.get("success") and result.get("post_id"):
-                    platform_post_ids["instagram"] = result["post_id"]
-                publish_results.append({"platform": "instagram", **result})
-            elif platform == "twitter":
-                result = publish_to_twitter(
+                )}
+            if platform == "twitter":
+                return {"platform": platform, **publish_to_twitter(
                     access_token=account.access_token,
                     caption=full_caption,
                     media_urls=media_urls,
-                )
+                )}
+            return {"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"}
+
+        with ThreadPoolExecutor() as pool:
+            futures = {pool.submit(_publish_one, p): p for p in body.platform_account_ids}
+            for future in as_completed(futures):
+                result = future.result()
+                publish_results.append(result)
                 if result.get("success") and result.get("post_id"):
-                    platform_post_ids["twitter"] = result["post_id"]
-                publish_results.append({"platform": "twitter", **result})
-            else:
-                publish_results.append({"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"})
+                    platform_post_ids[result["platform"]] = result["post_id"]
 
     any_success = any(r["success"] for r in publish_results)
     status = "scheduled" if body.scheduled_at else ("published" if any_success else "failed")
@@ -270,43 +270,40 @@ def retry_post(
 
     full_caption = post.caption + ("\n\n" + " ".join(post.hashtags) if post.hashtags else "")
 
-    publish_results: list[dict] = []
-    for platform in (post.platform_account_ids or []):
+    def _retry_one(platform: str) -> dict:
         account = db.query(SocialAccount).filter(
             SocialAccount.user_id == current_user.id,
             SocialAccount.platform == platform,
             SocialAccount.is_connected == True,
         ).first()
         if not account or not account.access_token:
-            publish_results.append({"platform": platform, "success": False, "error": "Not connected"})
-            continue
-
+            return {"platform": platform, "success": False, "error": "Not connected"}
         if platform == "instagram":
-            result = publish_to_instagram(
+            return {"platform": platform, **publish_to_instagram(
                 access_token=account.access_token,
                 ig_user_id=account.platform_user_id,
                 caption=full_caption,
                 media_urls=post.media_urls or [],
                 media_type=post.media_type or "image",
-            )
-            if result.get("success") and result.get("post_id"):
-                ids = dict(post.platform_post_ids or {})
-                ids["instagram"] = result["post_id"]
-                post.platform_post_ids = ids
-            publish_results.append({"platform": "instagram", **result})
-        elif platform == "twitter":
-            result = publish_to_twitter(
+            )}
+        if platform == "twitter":
+            return {"platform": platform, **publish_to_twitter(
                 access_token=account.access_token,
                 caption=full_caption,
                 media_urls=post.media_urls or [],
-            )
+            )}
+        return {"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"}
+
+    publish_results: list[dict] = []
+    with ThreadPoolExecutor() as pool:
+        futures = {pool.submit(_retry_one, p): p for p in (post.platform_account_ids or [])}
+        for future in as_completed(futures):
+            result = future.result()
+            publish_results.append(result)
             if result.get("success") and result.get("post_id"):
                 ids = dict(post.platform_post_ids or {})
-                ids["twitter"] = result["post_id"]
+                ids[result["platform"]] = result["post_id"]
                 post.platform_post_ids = ids
-            publish_results.append({"platform": "twitter", **result})
-        else:
-            publish_results.append({"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"})
 
     any_success = any(r["success"] for r in publish_results)
     post.status = "published" if any_success else "failed"
