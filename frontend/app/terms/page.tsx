@@ -105,8 +105,8 @@ export default function TermsOfService() {
           </h2>
           <p style={{ lineHeight: "1.8", color: "#cbd5e1" }}>
             If you have any questions about these terms, feel free to reach out at{" "}
-            <a href="mailto:abdulqudusthefirst@gmail.com" style={{ color: "#6366f1", textDecoration: "none" }}>
-              abdulqudusthefirst@gmail.com
+            <a href="mailto:socialos007@gmail.com" style={{ color: "#6366f1", textDecoration: "none" }}>
+              socialos007@gmail.com
             </a>. We are happy to help.
           </p>
         </section>
