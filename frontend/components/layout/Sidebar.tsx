@@ -18,7 +18,7 @@ const NAV = [
   { label: "Calendar", href: "/calendar", icon: Calendar },
   { label: "Automation", href: "/automation", icon: Zap },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
-  { label: "Inbox", href: "/inbox", icon: Inbox, badge: 3 },
+  { label: "Inbox", href: "/inbox", icon: Inbox },
   { label: "Media", href: "/media", icon: Image },
   { label: "Competitors", href: "/competitors", icon: Users },
   { label: "Settings", href: "/settings", icon: Settings },
