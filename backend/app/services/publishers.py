@@ -271,6 +271,65 @@ def publish_to_tiktok(
         return {"success": False, "error": str(e)}
 
 
+def publish_to_tiktok(
+    access_token: str,
+    caption: str,
+    media_urls: list[str] | None = None,
+) -> dict:
+    """Send a video to the user's TikTok inbox via Content Posting API (PULL_FROM_URL).
+
+    The video appears as a draft in the user's TikTok app — they tap Post to publish.
+    No audit approval required. Caption must be added by the user in the TikTok app.
+    Returns {"success": True, "post_id": "..."} or {"success": False, "error": "..."}.
+    """
+    if not media_urls:
+        return {"success": False, "error": "TikTok requires a video URL"}
+
+    video_url = media_urls[0]
+
+    # TikTok PULL_FROM_URL requires the exact file size upfront
+    video_size = 0
+    try:
+        with httpx.Client(timeout=30) as client:
+            head = client.head(video_url, follow_redirects=True)
+            video_size = int(head.headers.get("content-length", 0))
+    except Exception:
+        pass
+
+    if not video_size:
+        return {"success": False, "error": "Could not determine video file size — ensure the URL returns a Content-Length header"}
+
+    try:
+        with httpx.Client(timeout=60) as client:
+            resp = client.post(
+                "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
+                json={
+                    "source_info": {
+                        "source": "PULL_FROM_URL",
+                        "video_url": video_url,
+                        "video_size": video_size,
+                        "chunk_size": video_size,
+                        "total_chunk_count": 1,
+                    }
+                },
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json; charset=UTF-8",
+                },
+            )
+            data = resp.json()
+
+        err = data.get("error", {})
+        if err.get("code") == "ok":
+            publish_id = data.get("data", {}).get("publish_id", "inbox")
+            return {"success": True, "post_id": publish_id}
+
+        return {"success": False, "error": err.get("message", str(data))}
+    except Exception as e:
+        log.warning("TikTok publish failed: %s", e)
+        return {"success": False, "error": str(e)}
+
+
 def fetch_instagram_insights(access_token: str, media_id: str, media_type: str = "image") -> dict:
     """Fetch real engagement metrics for a published Instagram post.
 

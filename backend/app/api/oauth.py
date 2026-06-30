@@ -309,6 +309,20 @@ async def tiktok_callback(code: str, state: str = "", db: Session = Depends(get_
     if "access_token" not in data:
         return RedirectResponse(_error_redirect("token_exchange_failed"))
 
+    # Fetch TikTok display name / username
+    handle = ""
+    open_id = data.get("open_id", "")
+    async with httpx.AsyncClient() as client:
+        me = await client.get(
+            "https://open.tiktokapis.com/v2/user/info/",
+            params={"fields": "open_id,username,display_name"},
+            headers={"Authorization": f"Bearer {data['access_token']}"},
+        )
+        user_data = me.json().get("data", {}).get("user", {})
+        handle = user_data.get("display_name") or user_data.get("username") or ""
+        if not open_id:
+            open_id = user_data.get("open_id", "")
+
     _upsert_account(db, state, "tiktok", data["access_token"], data.get("refresh_token"),
-                    platform_user_id=data.get("open_id", ""))
+                    handle=handle, platform_user_id=open_id)
     return RedirectResponse(_settings_redirect("tiktok"))
