@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from ..api.deps import get_current_user
 from ..db.database import get_db
@@ -8,6 +9,34 @@ from ..core.config import settings
 import uuid, httpx, urllib.parse
 
 router = APIRouter(prefix="/media", tags=["media"])
+
+
+@router.get("/proxy")
+def proxy_media(url: str):
+    """Re-serve a Cloudinary file under our own domain (unauthenticated — TikTok's
+    PULL_FROM_URL fetches this without credentials, and TikTok only trusts URLs
+    on a domain we've verified ownership of)."""
+    if not url.startswith("https://res.cloudinary.com/"):
+        raise HTTPException(400, "Only Cloudinary URLs are allowed")
+
+    try:
+        head = httpx.head(url, follow_redirects=True, timeout=30)
+        head.raise_for_status()
+    except Exception as e:
+        raise HTTPException(502, f"Failed to fetch media: {e}")
+
+    content_type = head.headers.get("content-type", "application/octet-stream")
+    headers = {}
+    if "content-length" in head.headers:
+        headers["Content-Length"] = head.headers["content-length"]
+
+    def _stream():
+        with httpx.stream("GET", url, follow_redirects=True, timeout=60) as resp:
+            resp.raise_for_status()
+            for chunk in resp.iter_bytes(chunk_size=65536):
+                yield chunk
+
+    return StreamingResponse(_stream(), media_type=content_type, headers=headers)
 
 
 def _cloudinary_configured() -> bool:

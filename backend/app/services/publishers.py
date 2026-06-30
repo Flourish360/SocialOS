@@ -2,10 +2,12 @@
 import httpx
 import logging
 import time
+import urllib.parse
 
 log = logging.getLogger(__name__)
 
 IG_API = "https://graph.instagram.com/v21.0"
+BACKEND_BASE = "https://socialos-production-1712.up.railway.app"
 
 
 def _wait_for_container(client: httpx.Client, container_id: str, access_token: str, max_attempts: int = 30) -> str | None:
@@ -285,7 +287,13 @@ def publish_to_tiktok(
     if not media_urls:
         return {"success": False, "error": "TikTok requires a video URL"}
 
-    video_url = media_urls[0]
+    raw_url = media_urls[0]
+    # TikTok only trusts URLs on a domain we've verified ownership of, so route
+    # Cloudinary URLs through our own backend proxy.
+    video_url = (
+        f"{BACKEND_BASE}/api/media/proxy?url={urllib.parse.quote(raw_url, safe='')}"
+        if "cloudinary.com" in raw_url else raw_url
+    )
 
     # TikTok PULL_FROM_URL requires the exact file size upfront
     video_size = 0
