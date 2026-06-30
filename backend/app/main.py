@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from contextlib import asynccontextmanager
 from .core.config import settings
 from .api import auth, accounts, posts, analytics, ai, automation
@@ -58,6 +59,11 @@ app.include_router(ai.router, prefix="/api")
 app.include_router(automation.router, prefix="/api")
 app.include_router(media.router, prefix="/api")
 app.include_router(oauth.router, prefix="/api")
+
+
+@app.get("/tiktokUa8acPuFtCCajoI4A6FIz32AiSnbh7of.txt", response_class=PlainTextResponse)
+def tiktok_domain_verification():
+    return "tiktok-developers-site-verification=Ua8acPuFtCCajoI4A6FIz32AiSnbh7of"
 
 
 @app.get("/health")
