@@ -48,3 +48,31 @@ def sync_instagram_account(db: Session, account) -> bool:
     db.commit()
     log.info("Synced Instagram %s: %d followers", account.handle, account.follower_count or 0)
     return True
+
+
+def fetch_online_followers(access_token: str, ig_user_id: str) -> dict[str, int] | None:
+    """Fetch Instagram's `online_followers` insight — real hourly breakdown of how many
+    of this account's followers were online today, keyed by hour-of-day (0-23, UTC).
+
+    Requires a Business/Creator account with at least 100 followers (Meta's minimum
+    for audience insights). Returns None if unavailable.
+    """
+    try:
+        with httpx.Client(timeout=15) as client:
+            resp = client.get(
+                f"{IG_API}/{ig_user_id}/insights",
+                params={"metric": "online_followers", "period": "lifetime", "access_token": access_token},
+            )
+            data = resp.json()
+    except Exception as e:
+        log.warning("Instagram online_followers fetch failed for %s: %s", ig_user_id, e)
+        return None
+
+    values = (data.get("data") or [{}])[0].get("values") if data.get("data") else None
+    if not values:
+        return None
+
+    latest = values[-1].get("value") or {}
+    if not latest:
+        return None
+    return {str(h): int(latest.get(str(h), 0)) for h in range(24)}

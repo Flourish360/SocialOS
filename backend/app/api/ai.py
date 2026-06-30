@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 from ..api.deps import get_current_user
+from ..db.database import get_db
 from ..models.user import User
+from ..models.social_account import SocialAccount
 from ..schemas.post import AIGenerateRequest, AIRewriteRequest, HashtagSuggestRequest
 from ..core.config import settings
 
@@ -195,8 +198,101 @@ def suggest_hashtags(body: HashtagSuggestRequest, current_user: User = Depends(g
     return {"hashtags": base[:body.count], "trending": base[:3], "niche": base[3:7], "evergreen": base[7:], "platform": body.platform}
 
 
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _hour_label(hour: int) -> str:
+    period = "AM" if hour < 12 else "PM"
+    display_hour = hour % 12 or 12
+    return f"{display_hour}:00 {period}"
+
+
+def _score_label(score: int) -> str:
+    if score >= 90:
+        return "Peak"
+    if score >= 80:
+        return "High"
+    return "Good"
+
+
 @router.get("/best-time")
-def best_time(platform: str = "instagram", current_user: User = Depends(get_current_user)):
+def best_time(
+    platform: str = "instagram",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if platform == "instagram":
+        account = db.query(SocialAccount).filter(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.platform == "instagram",
+            SocialAccount.is_connected == True,
+        ).first()
+
+        if account and account.access_token and account.platform_user_id:
+            from ..models.audience_snapshot import AudienceSnapshot
+            from datetime import datetime, timezone
+
+            snapshots = db.query(AudienceSnapshot).filter(
+                AudienceSnapshot.account_id == account.id,
+            ).all()
+
+            if snapshots:
+                # Real weekly pattern, averaged from accumulated daily captures.
+                sums: dict[tuple[int, int], float] = {}
+                counts: dict[tuple[int, int], int] = {}
+                for snap in snapshots:
+                    for hour_str, value in (snap.hourly_counts or {}).items():
+                        key = (snap.day_of_week, int(hour_str))
+                        sums[key] = sums.get(key, 0) + int(value)
+                        counts[key] = counts.get(key, 0) + 1
+                averages = {k: sums[k] / counts[k] for k in sums}
+                top = sorted(averages.items(), key=lambda kv: kv[1], reverse=True)[:3]
+                if top and top[0][1] > 0:
+                    max_val = top[0][1]
+                    windows = [
+                        {
+                            "day": DAY_NAMES[day],
+                            "time": _hour_label(hour),
+                            "score": (score := round(min(99, 60 + (avg / max_val) * 39))),
+                            "label": _score_label(score),
+                        }
+                        for (day, hour), avg in top
+                    ]
+                    return {
+                        "platform": "instagram", "windows": windows,
+                        "next_optimal": f"{windows[0]['day']} at {windows[0]['time']}",
+                        "timezone": "UTC", "source": "real",
+                        "data_points": len(snapshots),
+                    }
+
+            # No accumulated weekly history yet — fall back to today's live
+            # online-follower curve so the data is still real, just not weekly.
+            from ..services.instagram_sync import fetch_online_followers
+            hourly = fetch_online_followers(account.access_token, account.platform_user_id)
+            if hourly:
+                top = sorted(hourly.items(), key=lambda kv: int(kv[1]), reverse=True)[:3]
+                max_val = int(top[0][1]) if top else 0
+                if max_val > 0:
+                    today = DAY_NAMES[datetime.now(timezone.utc).weekday()]
+                    windows = [
+                        {
+                            "day": today,
+                            "time": _hour_label(int(hour_str)),
+                            "score": (score := round(min(99, 60 + (int(value) / max_val) * 39))),
+                            "label": _score_label(score),
+                        }
+                        for hour_str, value in top
+                    ]
+                    return {
+                        "platform": "instagram", "windows": windows,
+                        "next_optimal": f"Today at {windows[0]['time']}",
+                        "timezone": "UTC", "source": "real_today",
+                        "data_points": 1,
+                    }
+
+    # Fallback: industry-benchmark windows — used when there's no connected account
+    # yet, or the platform's API doesn't expose audience activity data (Twitter,
+    # TikTok, and LinkedIn don't offer this on standard developer access tiers as of 2026).
     WINDOWS = {
         "instagram": [
             {"day": "Monday", "time": "11:00 AM", "score": 85, "label": "High"},
@@ -225,7 +321,11 @@ def best_time(platform: str = "instagram", current_user: User = Depends(get_curr
         ],
     }
     windows = WINDOWS.get(platform, WINDOWS["instagram"])
-    return {"platform": platform, "windows": windows, "next_optimal": f"Today at {windows[0]['time']}", "timezone": "Africa/Lagos"}
+    return {
+        "platform": platform, "windows": windows,
+        "next_optimal": f"Today at {windows[0]['time']}",
+        "timezone": "Africa/Lagos", "source": "benchmark",
+    }
 
 
 @router.post("/captions")

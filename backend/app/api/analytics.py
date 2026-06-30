@@ -131,11 +131,47 @@ def follower_series(
     return []
 
 
+DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
 @router.get("/heatmap")
-def audience_heatmap(current_user: User = Depends(get_current_user)):
+def audience_heatmap(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     if settings.USE_MOCK_DATA:
         return HEATMAP_DATA
-    return []
+
+    from ..models.audience_snapshot import AudienceSnapshot
+
+    account_ids = [
+        a.id for a in db.query(SocialAccount).filter(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.platform == "instagram",
+        ).all()
+    ]
+    if not account_ids:
+        return []
+
+    snapshots = db.query(AudienceSnapshot).filter(
+        AudienceSnapshot.account_id.in_(account_ids),
+    ).all()
+    if not snapshots:
+        return []
+
+    # Average real online-follower counts per (day_of_week, hour) across all captured snapshots.
+    sums: dict[tuple[int, int], int] = {}
+    counts: dict[tuple[int, int], int] = {}
+    for snap in snapshots:
+        for hour_str, value in (snap.hourly_counts or {}).items():
+            key = (snap.day_of_week, int(hour_str))
+            sums[key] = sums.get(key, 0) + int(value)
+            counts[key] = counts.get(key, 0) + 1
+
+    return [
+        {"day": DAY_LABELS[day], "hour": hour, "value": round(sums[(day, hour)] / counts[(day, hour)])}
+        for (day, hour) in sums
+    ]
 
 
 @router.post("/ask", response_model=NLQResponse)

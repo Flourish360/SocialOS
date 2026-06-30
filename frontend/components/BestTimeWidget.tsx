@@ -27,6 +27,16 @@ export default function BestTimeWidget({ platform = "instagram" }: BestTimeWidge
       <div className="flex items-center gap-2 mb-3">
         <Clock className="w-4 h-4 text-violet-400" />
         <span className="text-sm font-semibold text-white">Best Times to Post</span>
+        {data.source && data.source !== "benchmark" && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-400/10 border-emerald-500/20">
+            {data.source === "real" ? "Live audience data" : "Today's live data"}
+          </span>
+        )}
+        {data.source === "benchmark" && (
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border text-slate-400 bg-slate-800 border-slate-700">
+            Estimate
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mb-3 p-2.5 bg-violet-500/10 border border-violet-500/20 rounded-lg">

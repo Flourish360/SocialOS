@@ -6,7 +6,7 @@ from .core.config import settings
 from .api import auth, accounts, posts, analytics, ai, automation
 from .api import media, oauth
 from .db.database import engine, Base
-from .models import user, social_account, post  # ensure models are registered
+from .models import user, social_account, post, audience_snapshot  # ensure models are registered
 from .scheduler import scheduler
 
 try:

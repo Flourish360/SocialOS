@@ -59,7 +59,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ label, href, icon: Icon, badge }) => {
+        {NAV.map(({ label, href, icon: Icon }) => {
           const active = href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
           return (
             <Link
@@ -75,11 +75,6 @@ export default function Sidebar() {
             >
               <Icon className={cn("w-4 h-4 shrink-0", active ? "text-violet-400" : "text-slate-500 group-hover:text-slate-300")} />
               <span className="flex-1">{label}</span>
-              {badge && (
-                <span className="bg-violet-600 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
-                  {badge}
-                </span>
-              )}
               {active && <ChevronRight className="w-3 h-3 text-violet-400" />}
             </Link>
           );
