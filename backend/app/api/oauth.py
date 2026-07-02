@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone, timedelta
 import httpx, uuid, base64
 
 from ..api.deps import get_current_user
@@ -59,7 +60,8 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
 
 
 def _upsert_account(db: Session, user_id: str, platform: str, access_token: str,
-                    refresh_token: str | None = None, handle: str = "", platform_user_id: str = ""):
+                    refresh_token: str | None = None, handle: str = "", platform_user_id: str = "",
+                    token_expires_at: datetime | None = None):
     account = db.query(SocialAccount).filter(
         SocialAccount.user_id == user_id,
         SocialAccount.platform == platform,
@@ -79,6 +81,8 @@ def _upsert_account(db: Session, user_id: str, platform: str, access_token: str,
         account.handle = handle
     if platform_user_id:
         account.platform_user_id = platform_user_id
+    if token_expires_at:
+        account.token_expires_at = token_expires_at
     account.is_connected = True
     db.commit()
     return account
@@ -323,6 +327,8 @@ async def tiktok_callback(code: str, state: str = "", db: Session = Depends(get_
         if not open_id:
             open_id = user_data.get("open_id", "")
 
+    expires_in = int(data.get("expires_in", 86400))
+    token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
     _upsert_account(db, state, "tiktok", data["access_token"], data.get("refresh_token"),
-                    handle=handle, platform_user_id=open_id)
+                    handle=handle, platform_user_id=open_id, token_expires_at=token_expires_at)
     return RedirectResponse(_settings_redirect("tiktok"))

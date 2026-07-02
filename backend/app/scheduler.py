@@ -66,6 +66,10 @@ def _publish_due_posts():
                     else:
                         logger.warning("Scheduled post %s failed on Twitter: %s", post.id, result.get("error"))
                 elif platform == "tiktok":
+                    from .services.token_refresh import ensure_tiktok_token
+                    if not ensure_tiktok_token(account, db):
+                        logger.warning("Scheduled post %s: TikTok token expired and refresh failed", post.id)
+                        continue
                     result = publish_to_tiktok(
                         access_token=account.access_token,
                         caption=full_caption,
