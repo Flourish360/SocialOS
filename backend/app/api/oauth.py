@@ -49,7 +49,7 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
         "tiktok": (
             f"https://www.tiktok.com/v2/auth/authorize"
             f"?client_key={settings.TIKTOK_CLIENT_ID}"
-            f"&response_type=code&scope=user.info.basic,video.upload,video.publish"
+            f"&response_type=code&scope=user.info.basic,video.upload"
             f"&redirect_uri={TIKTOK_CALLBACK}&state={uid}"
         ) if settings.TIKTOK_CLIENT_ID else None,
     }
@@ -284,7 +284,7 @@ def tiktok_auth(current_user: User = Depends(get_current_user)):
         f"https://www.tiktok.com/v2/auth/authorize"
         f"?client_key={settings.TIKTOK_CLIENT_ID}"
         f"&response_type=code"
-        f"&scope=user.info.basic,video.upload,video.publish"
+        f"&scope=user.info.basic,video.upload"
         f"&redirect_uri={TIKTOK_CALLBACK}"
         f"&state={current_user.id}"
     )
