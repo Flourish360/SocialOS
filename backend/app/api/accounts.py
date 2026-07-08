@@ -7,6 +7,7 @@ from ..db.database import get_db
 from ..models.user import User
 from ..models.social_account import SocialAccount
 from ..services.instagram_sync import sync_instagram_account
+from ..services.tiktok_sync import sync_tiktok_account
 from ..mock.data import MOCK_ACCOUNTS
 from ..core.config import settings
 
@@ -40,6 +41,8 @@ def list_accounts(current_user: User = Depends(get_current_user), db: Session = 
     for a in accounts:
         if a.platform == "instagram" and a.last_synced_at is None:
             sync_instagram_account(db, a)
+        if a.platform == "tiktok" and a.handle in ("", "pending", None):
+            sync_tiktok_account(db, a)
     return [_serialize(a) for a in accounts]
 
 

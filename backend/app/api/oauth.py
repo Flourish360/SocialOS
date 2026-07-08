@@ -323,9 +323,11 @@ async def tiktok_callback(code: str, state: str = "", db: Session = Depends(get_
             headers={"Authorization": f"Bearer {data['access_token']}"},
         )
         user_data = me.json().get("data", {}).get("user", {})
-        handle = user_data.get("display_name") or user_data.get("username") or ""
         if not open_id:
             open_id = user_data.get("open_id", "")
+        # display_name is available with user.info.basic; fall back to open_id so
+        # the handle is never left as "pending" (sandbox accounts may have no display name)
+        handle = user_data.get("display_name") or open_id or ""
 
     expires_in = int(data.get("expires_in", 86400))
     token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
