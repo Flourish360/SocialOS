@@ -217,72 +217,13 @@ def publish_to_tiktok(
     caption: str,
     media_urls: list[str] | None = None,
 ) -> dict:
-    """Send a video to the user's TikTok inbox (Upload to Inbox flow).
-
-    The video lands in the user's TikTok drafts — they tap one button in the
-    TikTok app to publish it publicly. No audit approval required.
-    Returns {"success": True, "post_id": "..."} or {"success": False, "error": "..."}.
-    """
-    video_url = (media_urls or [None])[0]
-    if not video_url:
-        return {"success": False, "error": "TikTok requires a video URL — add a video to this post"}
-
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json; charset=UTF-8",
-    }
-
-    try:
-        with httpx.Client(timeout=30) as client:
-            resp = client.post(
-                "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-                headers=headers,
-                json={"source_info": {"source": "PULL_FROM_URL", "video_url": video_url}},
-            )
-            data = resp.json()
-
-        error = data.get("error", {})
-        if error.get("code", "ok") != "ok":
-            return {"success": False, "error": error.get("message", "TikTok upload init failed")}
-
-        publish_id = data.get("data", {}).get("publish_id")
-        if not publish_id:
-            return {"success": False, "error": f"No publish_id returned: {data}"}
-
-        # Poll until TikTok confirms the video is in the inbox (up to ~60s)
-        for _ in range(20):
-            time.sleep(3)
-            with httpx.Client(timeout=15) as client:
-                status_resp = client.post(
-                    "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
-                    headers=headers,
-                    json={"publish_id": publish_id},
-                )
-                status_data = status_resp.json()
-
-            status = status_data.get("data", {}).get("status", "")
-            if status in ("PUBLISH_COMPLETE", "INBOX"):
-                return {"success": True, "post_id": publish_id}
-            if status == "FAILED":
-                reason = status_data.get("data", {}).get("fail_reason", "Unknown")
-                return {"success": False, "error": f"TikTok processing failed: {reason}"}
-
-        return {"success": False, "error": "TikTok upload timed out after 60s"}
-    except Exception as e:
-        log.warning("TikTok publish failed: %s", e)
-        return {"success": False, "error": str(e)}
-
-
-def publish_to_tiktok(
-    access_token: str,
-    caption: str,
-    media_urls: list[str] | None = None,
-) -> dict:
     """Send a video to the user's TikTok inbox via Content Posting API (PULL_FROM_URL).
 
     The video appears as a draft in the user's TikTok app — they tap Post to publish.
     No audit approval required. Caption must be added by the user in the TikTok app.
-    Returns {"success": True, "post_id": "..."} or {"success": False, "error": "..."}.
+    Polls the status endpoint to confirm delivery before returning success.
+    Returns {"success": True, "post_id": "...", "tiktok_status": "INBOX"} or
+            {"success": False, "error": "..."}.
     """
     if not media_urls:
         return {"success": False, "error": "TikTok requires a video URL"}
@@ -294,6 +235,11 @@ def publish_to_tiktok(
         f"{BACKEND_BASE}/api/media/proxy?url={urllib.parse.quote(raw_url, safe='')}"
         if "cloudinary.com" in raw_url else raw_url
     )
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json; charset=UTF-8",
+    }
 
     # TikTok PULL_FROM_URL requires the exact file size upfront
     video_size = 0
@@ -320,19 +266,37 @@ def publish_to_tiktok(
                         "total_chunk_count": 1,
                     }
                 },
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json; charset=UTF-8",
-                },
+                headers=headers,
             )
             data = resp.json()
 
         err = data.get("error", {})
-        if err.get("code") == "ok":
-            publish_id = data.get("data", {}).get("publish_id", "inbox")
-            return {"success": True, "post_id": publish_id}
+        if err.get("code", "ok") != "ok":
+            return {"success": False, "error": err.get("message", str(data))}
 
-        return {"success": False, "error": err.get("message", str(data))}
+        publish_id = data.get("data", {}).get("publish_id")
+        if not publish_id:
+            return {"success": False, "error": f"No publish_id returned: {data}"}
+
+        # Poll until TikTok confirms the video reached the inbox (up to ~60s)
+        for _ in range(20):
+            time.sleep(3)
+            with httpx.Client(timeout=15) as client:
+                status_resp = client.post(
+                    "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
+                    headers=headers,
+                    json={"publish_id": publish_id},
+                )
+                status_data = status_resp.json()
+
+            status = status_data.get("data", {}).get("status", "")
+            if status in ("PUBLISH_COMPLETE", "INBOX"):
+                return {"success": True, "post_id": publish_id, "tiktok_status": status}
+            if status == "FAILED":
+                reason = status_data.get("data", {}).get("fail_reason", "Unknown")
+                return {"success": False, "error": f"TikTok processing failed: {reason}"}
+
+        return {"success": False, "error": "TikTok upload timed out — video may still arrive in your inbox"}
     except Exception as e:
         log.warning("TikTok publish failed: %s", e)
         return {"success": False, "error": str(e)}
