@@ -278,8 +278,9 @@ def publish_to_tiktok(
         if not publish_id:
             return {"success": False, "error": f"No publish_id returned: {data}"}
 
-        # Poll until TikTok confirms the video reached the inbox (up to ~60s)
-        for _ in range(20):
+        # Poll until TikTok confirms the video reached the inbox (up to ~2 min).
+        # Inbox flow success status is SEND_TO_USER_INBOX; direct post uses PUBLISH_COMPLETE.
+        for _ in range(40):
             time.sleep(3)
             with httpx.Client(timeout=15) as client:
                 status_resp = client.post(
@@ -290,13 +291,14 @@ def publish_to_tiktok(
                 status_data = status_resp.json()
 
             status = status_data.get("data", {}).get("status", "")
-            if status in ("PUBLISH_COMPLETE", "INBOX"):
+            log.info("TikTok publish_id=%s status=%s", publish_id, status)
+            if status in ("SEND_TO_USER_INBOX", "PUBLISH_COMPLETE"):
                 return {"success": True, "post_id": publish_id, "tiktok_status": status}
             if status == "FAILED":
                 reason = status_data.get("data", {}).get("fail_reason", "Unknown")
                 return {"success": False, "error": f"TikTok processing failed: {reason}"}
 
-        return {"success": False, "error": "TikTok upload timed out — video may still arrive in your inbox"}
+        return {"success": False, "error": "TikTok upload timed out after 2 minutes"}
     except Exception as e:
         log.warning("TikTok publish failed: %s", e)
         return {"success": False, "error": str(e)}
