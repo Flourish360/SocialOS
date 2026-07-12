@@ -43,7 +43,7 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
         "linkedin": (
             f"https://www.linkedin.com/oauth/v2/authorization"
             f"?response_type=code&client_id={settings.LINKEDIN_CLIENT_ID}"
-            f"&redirect_uri={settings.FRONTEND_URL}/api/oauth/linkedin/callback"
+            f"&redirect_uri={LINKEDIN_CALLBACK}"
             f"&scope=openid+profile+email+w_member_social&state={uid}"
         ) if settings.LINKEDIN_CLIENT_ID else None,
         "tiktok": (
@@ -218,16 +218,18 @@ async def twitter_callback(code: str, state: str = "", db: Session = Depends(get
 
 # ── LinkedIn ──────────────────────────────────────────────────────────────────
 
+LINKEDIN_CALLBACK = "https://socialos-production-1712.up.railway.app/api/oauth/linkedin/callback"
+
+
 @router.get("/linkedin")
 def linkedin_auth(current_user: User = Depends(get_current_user)):
     if not settings.LINKEDIN_CLIENT_ID:
-        raise HTTPException(400, "LINKEDIN_CLIENT_ID not configured — add it to backend/.env")
-    redirect_uri = f"{settings.FRONTEND_URL}/api/oauth/linkedin/callback"
+        raise HTTPException(400, "LINKEDIN_CLIENT_ID not configured — add it to Railway variables")
     url = (
         f"https://www.linkedin.com/oauth/v2/authorization"
         f"?response_type=code"
         f"&client_id={settings.LINKEDIN_CLIENT_ID}"
-        f"&redirect_uri={redirect_uri}"
+        f"&redirect_uri={LINKEDIN_CALLBACK}"
         f"&scope=openid+profile+email+w_member_social"
         f"&state={current_user.id}"
     )
@@ -239,7 +241,6 @@ async def linkedin_callback(code: str, state: str = "", db: Session = Depends(ge
     if not state or not settings.LINKEDIN_CLIENT_ID:
         return RedirectResponse(_error_redirect("oauth_failed"))
 
-    redirect_uri = f"{settings.FRONTEND_URL}/api/oauth/linkedin/callback"
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://www.linkedin.com/oauth/v2/accessToken",
@@ -248,7 +249,7 @@ async def linkedin_callback(code: str, state: str = "", db: Session = Depends(ge
                 "code": code,
                 "client_id": settings.LINKEDIN_CLIENT_ID,
                 "client_secret": settings.LINKEDIN_CLIENT_SECRET,
-                "redirect_uri": redirect_uri,
+                "redirect_uri": LINKEDIN_CALLBACK,
             },
         )
         data = resp.json()
@@ -256,7 +257,6 @@ async def linkedin_callback(code: str, state: str = "", db: Session = Depends(ge
     if "access_token" not in data:
         return RedirectResponse(_error_redirect("token_exchange_failed"))
 
-    # Fetch LinkedIn profile
     handle, platform_user_id = "", ""
     async with httpx.AsyncClient() as client:
         profile = await client.get(
@@ -267,7 +267,10 @@ async def linkedin_callback(code: str, state: str = "", db: Session = Depends(ge
         handle = p.get("name", "")
         platform_user_id = p.get("sub", "")
 
-    _upsert_account(db, state, "linkedin", data["access_token"], None, handle, platform_user_id)
+    # LinkedIn access tokens expire in 60 days
+    token_expires_at = datetime.now(timezone.utc) + timedelta(days=60)
+    _upsert_account(db, state, "linkedin", data["access_token"], data.get("refresh_token"),
+                    handle, platform_user_id, token_expires_at=token_expires_at)
     return RedirectResponse(_settings_redirect("linkedin"))
 
 

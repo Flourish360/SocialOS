@@ -9,7 +9,7 @@ def _publish_due_posts():
     from .db.database import SessionLocal
     from .models.post import Post
     from .models.social_account import SocialAccount
-    from .services.publishers import publish_to_instagram, publish_to_twitter, publish_to_tiktok
+    from .services.publishers import publish_to_instagram, publish_to_twitter, publish_to_tiktok, publish_to_linkedin
 
     db = SessionLocal()
     try:
@@ -72,6 +72,13 @@ def _publish_due_posts():
                         continue
                     result = publish_to_tiktok(
                         access_token=account.access_token,
+                        caption=full_caption,
+                        media_urls=post.media_urls or [],
+                    )
+                elif platform == "linkedin":
+                    result = publish_to_linkedin(
+                        access_token=account.access_token,
+                        platform_user_id=account.platform_user_id,
                         caption=full_caption,
                         media_urls=post.media_urls or [],
                     )

@@ -304,6 +304,106 @@ def publish_to_tiktok(
         return {"success": False, "error": str(e)}
 
 
+def _upload_linkedin_image(access_token: str, owner_urn: str, image_url: str) -> str | None:
+    """Download an image and upload it to LinkedIn. Returns the image URN or None."""
+    try:
+        with httpx.Client(timeout=60) as client:
+            # Step 1: initialize upload
+            init_resp = client.post(
+                "https://api.linkedin.com/rest/images?action=initializeUpload",
+                json={"initializeUploadRequest": {"owner": owner_urn}},
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "LinkedIn-Version": "202411",
+                    "Content-Type": "application/json",
+                },
+            )
+            init_data = init_resp.json()
+            upload_url = init_data.get("value", {}).get("uploadUrl")
+            image_urn = init_data.get("value", {}).get("image")
+            if not upload_url or not image_urn:
+                log.warning("LinkedIn image init failed: %s", init_data)
+                return None
+
+            # Step 2: download source image
+            dl = client.get(image_url)
+            dl.raise_for_status()
+
+            # Step 3: PUT binary to LinkedIn's upload URL
+            put_resp = client.put(
+                upload_url,
+                content=dl.content,
+                headers={"Content-Type": dl.headers.get("content-type", "image/jpeg")},
+            )
+            if put_resp.status_code not in (200, 201):
+                log.warning("LinkedIn image PUT failed: %s", put_resp.status_code)
+                return None
+
+        return image_urn
+    except Exception as e:
+        log.warning("LinkedIn image upload failed: %s", e)
+        return None
+
+
+def publish_to_linkedin(
+    access_token: str,
+    platform_user_id: str,
+    caption: str,
+    media_urls: list[str] | None = None,
+) -> dict:
+    """Publish a text or image post to LinkedIn via the Posts REST API.
+
+    Supports text-only and single-image posts. Caption limit is 3000 characters.
+    Returns {"success": True, "post_id": "..."} or {"success": False, "error": "..."}.
+    """
+    owner_urn = f"urn:li:person:{platform_user_id}"
+    text = caption if len(caption) <= 3000 else caption[:2997] + "..."
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "LinkedIn-Version": "202411",
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+    }
+
+    payload: dict = {
+        "author": owner_urn,
+        "commentary": text,
+        "visibility": "PUBLIC",
+        "distribution": {
+            "feedDistribution": "MAIN_FEED",
+            "targetEntities": [],
+            "thirdPartyDistributionChannels": [],
+        },
+        "lifecycleState": "PUBLISHED",
+        "isReshareDisabledByAuthor": False,
+    }
+
+    # Attach image if provided
+    if media_urls:
+        image_urn = _upload_linkedin_image(access_token, owner_urn, media_urls[0])
+        if image_urn:
+            payload["content"] = {"media": {"id": image_urn}}
+
+    try:
+        with httpx.Client(timeout=30) as client:
+            resp = client.post(
+                "https://api.linkedin.com/rest/posts",
+                json=payload,
+                headers=headers,
+            )
+
+        if resp.status_code in (200, 201):
+            post_id = resp.headers.get("x-restli-id", resp.headers.get("X-RestLi-Id", ""))
+            return {"success": True, "post_id": post_id or "published"}
+
+        error_body = resp.json() if resp.content else {}
+        msg = error_body.get("message") or error_body.get("serviceErrorCode") or f"HTTP {resp.status_code}"
+        return {"success": False, "error": str(msg)}
+    except Exception as e:
+        log.warning("LinkedIn publish failed: %s", e)
+        return {"success": False, "error": str(e)}
+
+
 def fetch_instagram_insights(access_token: str, media_id: str, media_type: str = "image") -> dict:
     """Fetch real engagement metrics for a published Instagram post.
 

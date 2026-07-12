@@ -8,7 +8,7 @@ from ..models.social_account import SocialAccount
 from ..schemas.post import PostCreate, PostUpdate
 from ..mock.data import MOCK_POSTS
 from ..core.config import settings
-from ..services.publishers import publish_to_instagram, publish_to_twitter, publish_to_tiktok, fetch_instagram_insights
+from ..services.publishers import publish_to_instagram, publish_to_twitter, publish_to_tiktok, publish_to_linkedin, fetch_instagram_insights
 from ..services.token_refresh import ensure_tiktok_token
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -229,6 +229,13 @@ def create_post(
                     caption=full_caption,
                     media_urls=media_urls,
                 )}
+            if platform == "linkedin":
+                return {"platform": platform, **publish_to_linkedin(
+                    access_token=account.access_token,
+                    platform_user_id=account.platform_user_id,
+                    caption=full_caption,
+                    media_urls=media_urls,
+                )}
             return {"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"}
 
         with ThreadPoolExecutor() as pool:
@@ -306,6 +313,13 @@ def retry_post(
                 return {"platform": "tiktok", "success": False, "error": "TikTok token expired — reconnect TikTok in Settings"}
             return {"platform": platform, **publish_to_tiktok(
                 access_token=account.access_token,
+                caption=full_caption,
+                media_urls=post.media_urls or [],
+            )}
+        if platform == "linkedin":
+            return {"platform": platform, **publish_to_linkedin(
+                access_token=account.access_token,
+                platform_user_id=account.platform_user_id,
                 caption=full_caption,
                 media_urls=post.media_urls or [],
             )}
