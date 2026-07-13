@@ -1,7 +1,7 @@
 """Sync Instagram account stats (followers, media count, handle) from the Graph API."""
 import httpx
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
 log = logging.getLogger(__name__)
@@ -76,3 +76,47 @@ def fetch_online_followers(access_token: str, ig_user_id: str) -> dict[str, int]
     if not latest:
         return None
     return {str(h): int(latest.get(str(h), 0)) for h in range(24)}
+
+
+def refresh_instagram_token(access_token: str) -> dict | None:
+    """Refresh a long-lived Instagram token (valid 60 days) before it expires.
+
+    Returns {"access_token": ..., "expires_in": <seconds>} or None on failure.
+    Call at least once a week — tokens cannot be refreshed after they expire.
+    """
+    try:
+        with httpx.Client(timeout=15) as client:
+            resp = client.get(
+                "https://graph.instagram.com/refresh_access_token",
+                params={"grant_type": "ig_refresh_token", "access_token": access_token},
+            )
+            data = resp.json()
+    except Exception as e:
+        log.warning("Instagram token refresh request failed: %s", e)
+        return None
+    if "access_token" not in data:
+        log.warning("Instagram token refresh returned no token: %s", data)
+        return None
+    return data
+
+
+def fetch_instagram_comments(access_token: str, media_id: str, limit: int = 20) -> list[dict]:
+    """Fetch recent comments on an Instagram media object.
+
+    Returns a list of {"id", "text", "username", "timestamp"} dicts.
+    """
+    try:
+        with httpx.Client(timeout=15) as client:
+            resp = client.get(
+                f"{IG_API}/{media_id}/comments",
+                params={
+                    "fields": "id,text,username,timestamp",
+                    "limit": limit,
+                    "access_token": access_token,
+                },
+            )
+            data = resp.json()
+    except Exception as e:
+        log.warning("Instagram comments fetch failed for media %s: %s", media_id, e)
+        return []
+    return data.get("data") or []

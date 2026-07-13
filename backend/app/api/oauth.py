@@ -147,10 +147,13 @@ async def instagram_callback(code: str, state: str = "", db: Session = Depends(g
         if "access_token" in long_data:
             long_token = long_data["access_token"]
 
+    expires_in = long_data.get("expires_in") if "access_token" in long_data else None
+    ig_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in) if expires_in else None
     account = _upsert_account(
         db, state, "instagram",
         access_token=long_token,
         platform_user_id=user_id,
+        token_expires_at=ig_expiry,
     )
 
     # Fetch real follower count right away so the dashboard shows live data

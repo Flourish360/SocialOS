@@ -1,5 +1,5 @@
 from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -155,6 +155,47 @@ def _capture_follower_snapshots():
         db.close()
 
 
+def _refresh_instagram_tokens():
+    """Weekly: refresh long-lived Instagram tokens before their 60-day expiry.
+
+    Runs proactively for any token expiring within 14 days OR with no expiry
+    recorded (tokens issued before we started tracking expiry).
+    """
+    from .db.database import SessionLocal
+    from .models.social_account import SocialAccount
+    from .services.instagram_sync import refresh_instagram_token
+
+    db = SessionLocal()
+    try:
+        threshold = datetime.now(timezone.utc) + timedelta(days=14)
+        accounts = db.query(SocialAccount).filter(
+            SocialAccount.platform == "instagram",
+            SocialAccount.is_connected == True,
+        ).all()
+        refreshed = 0
+        for account in accounts:
+            needs_refresh = (
+                account.token_expires_at is None
+                or account.token_expires_at <= threshold
+            )
+            if not needs_refresh or not account.access_token:
+                continue
+            result = refresh_instagram_token(account.access_token)
+            if result and result.get("access_token"):
+                account.access_token = result["access_token"]
+                expires_in = result.get("expires_in", 5_184_000)  # default 60 days
+                account.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                refreshed += 1
+        if refreshed:
+            db.commit()
+            logger.info("Refreshed %d Instagram token(s)", refreshed)
+    except Exception:
+        logger.exception("Scheduler error during Instagram token refresh")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def _capture_audience_snapshots():
     """Once a day, capture each connected Instagram account's real hourly online-follower
     activity so /ai/best-time and /analytics/heatmap can build a genuine weekly pattern
@@ -200,3 +241,4 @@ scheduler.add_job(_publish_due_posts, "interval", minutes=1, id="publish_schedul
 scheduler.add_job(_sync_all_instagram_accounts, "interval", hours=1, id="sync_instagram_accounts")
 scheduler.add_job(_capture_follower_snapshots, "interval", hours=24, id="capture_follower_snapshots")
 scheduler.add_job(_capture_audience_snapshots, "interval", hours=24, id="capture_audience_snapshots")
+scheduler.add_job(_refresh_instagram_tokens, "interval", hours=24 * 7, id="refresh_instagram_tokens")

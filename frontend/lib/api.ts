@@ -98,9 +98,13 @@ export const automationApi = {
   rules: () => api.get("/automation/rules").then((r) => r.data),
   createRule: (body: Record<string, unknown>) => api.post("/automation/rules", body).then((r) => r.data),
   toggleRule: (id: string) => api.patch(`/automation/rules/${id}/toggle`).then((r) => r.data),
+  deleteRule: (id: string) => api.delete(`/automation/rules/${id}`).then((r) => r.data),
   inbox: (priority?: string) => api.get(`/automation/inbox${priority ? `?priority=${priority}` : ""}`).then((r) => r.data),
   reply: (id: string, text: string) => api.post(`/automation/inbox/${id}/reply`, { text }).then((r) => r.data),
   competitors: () => api.get("/automation/competitors").then((r) => r.data),
+  addCompetitor: (body: { name: string; handle: string; platform: string }) =>
+    api.post("/automation/competitors", body).then((r) => r.data),
+  deleteCompetitor: (id: string) => api.delete(`/automation/competitors/${id}`).then((r) => r.data),
 };
 
 export default api;

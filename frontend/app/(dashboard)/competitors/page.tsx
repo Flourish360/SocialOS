@@ -31,22 +31,21 @@ export default function CompetitorsPage() {
   const addCompetitor = async () => {
     if (!form.name.trim() || !form.handle.trim()) { toast.error("Name and handle are required"); return; }
     setAdding(true);
-    await new Promise((r) => setTimeout(r, 900));
-    const newComp = {
-      id: `comp-${Date.now()}`,
-      name: form.name,
-      handle: form.handle.startsWith("@") ? form.handle : `@${form.handle}`,
-      platform: form.platform,
-      followers: Math.floor(Math.random() * 50000) + 5000,
-      follower_growth_pct: (Math.random() * 10 - 2).toFixed(1),
-      posts_per_week: Math.floor(Math.random() * 10) + 1,
-      avg_engagement: (Math.random() * 5 + 1).toFixed(1),
-    };
-    setCompetitors((prev) => [...prev, newComp]);
-    setShowAdd(false);
-    setForm({ name: "", handle: "", platform: "instagram" });
-    toast.success(`Now tracking ${form.name}!`);
-    setAdding(false);
+    try {
+      const created = await automationApi.addCompetitor({
+        name: form.name,
+        handle: form.handle,
+        platform: form.platform,
+      });
+      setCompetitors((prev) => [...prev, created]);
+      setShowAdd(false);
+      setForm({ name: "", handle: "", platform: "instagram" });
+      toast.success(`Now tracking ${form.name}!`);
+    } catch {
+      toast.error("Failed to add competitor");
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
@@ -76,7 +75,11 @@ export default function CompetitorsPage() {
                   </p>
                 </div>
                 <button
-                  onClick={() => { setCompetitors((p) => p.filter((c) => c.id !== comp.id)); toast.success("Removed"); }}
+                  onClick={async () => {
+                    setCompetitors((p) => p.filter((c) => c.id !== comp.id));
+                    try { await automationApi.deleteCompetitor(comp.id); } catch {}
+                    toast.success("Removed");
+                  }}
                   className="text-slate-600 hover:text-slate-400 transition-colors shrink-0"
                 >
                   <X className="w-3.5 h-3.5" />
