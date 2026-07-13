@@ -15,7 +15,7 @@ def _publish_due_posts():
     try:
         now = datetime.now(timezone.utc)
         due = db.query(Post).filter(
-            Post.status == "scheduled",
+            Post.status.in_(["scheduled", "queued"]),
             Post.scheduled_at <= now,
         ).all()
 

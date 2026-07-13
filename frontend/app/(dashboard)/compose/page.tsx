@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
-import { Sparkles, Hash, Smile, Image, Send, Calendar, Loader2, CheckCircle, Wand2, Save, FolderOpen, X } from "lucide-react";
+import { Sparkles, Hash, Smile, Image, Send, Calendar, Loader2, CheckCircle, Wand2, Save, FolderOpen, X, Clock } from "lucide-react";
 import { aiApi, postsApi, mediaApi, accountsApi } from "@/lib/api";
 import toast from "react-hot-toast";
 import { cn, PLATFORM_COLORS } from "@/lib/utils";
@@ -209,6 +209,30 @@ export default function ComposePage() {
     }
   };
 
+  const addToQueue = async () => {
+    if (!caption.trim()) { toast.error("Write a caption first"); return; }
+    if (!selectedPlatforms.length) { toast.error("Select at least one platform"); return; }
+    setPublishing(true);
+    try {
+      const allMedia = attachedMediaList.length > 0 ? attachedMediaList : (attachedMedia ? [attachedMedia] : []);
+      await postsApi.create({
+        caption,
+        hashtags,
+        platform_account_ids: selectedPlatforms,
+        media_type: allMedia.length > 1 ? "carousel" : (allMedia[0]?.type || "none"),
+        media_url: allMedia[0]?.url,
+        media_urls: allMedia.map((m) => m.url),
+        queue: true,
+      });
+      toast.success("Added to queue - will publish at your best time!");
+      setCaption(""); setHashtags([]); setAttachedMedia(null); setAttachedMediaList([]);
+    } catch {
+      toast.error("Failed to add to queue");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const charLimit = Math.min(...selectedPlatforms.map((p) => PLATFORMS.find((pl) => pl.id === p)?.limit ?? 9999));
   const charCount = caption.length + hashtags.join(" ").length;
   const charPct = Math.min(100, (charCount / charLimit) * 100);
@@ -360,6 +384,7 @@ export default function ComposePage() {
                   Rewrite
                 </button>
                 <button onClick={() => setShowSchedule(true)} className="btn-secondary flex items-center gap-1.5 text-xs"><Calendar className="w-3.5 h-3.5" />Schedule</button>
+                <button onClick={addToQueue} disabled={publishing} className="btn-secondary flex items-center gap-1.5 text-xs"><Clock className="w-3.5 h-3.5" />Add to Queue</button>
                 <button onClick={publish} disabled={publishing} className="btn-primary flex items-center gap-1.5 text-xs">
                   {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   Publish now

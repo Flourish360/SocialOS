@@ -119,10 +119,30 @@ def reply_to_message(
     message_id: str,
     body: dict,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    # Acknowledges the reply intent — the frontend marks the message as replied
-    # optimistically. Actual platform reply calls would go here.
-    return {"status": "sent", "message_id": message_id, "reply": body.get("text")}
+    text = (body.get("text") or "").strip()
+    if text:
+        account = db.query(SocialAccount).filter(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.platform == "instagram",
+            SocialAccount.is_connected == True,
+        ).first()
+        if account and account.access_token:
+            import httpx as _httpx
+            import logging as _logging
+            _log = _logging.getLogger(__name__)
+            try:
+                with _httpx.Client(timeout=15) as client:
+                    resp = client.post(
+                        f"https://graph.instagram.com/v21.0/{message_id}/replies",
+                        params={"message": text, "access_token": account.access_token},
+                    )
+                if resp.status_code not in (200, 201):
+                    _log.warning("Instagram reply HTTP %s: %s", resp.status_code, resp.text[:200])
+            except Exception as e:
+                _log.warning("Instagram reply request failed: %s", e)
+    return {"status": "sent", "message_id": message_id, "reply": text}
 
 
 # ── Competitors ────────────────────────────────────────────────────────────────

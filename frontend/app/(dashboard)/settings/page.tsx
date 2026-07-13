@@ -244,14 +244,14 @@ export default function SettingsPage() {
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const searchParams = useSearchParams();
 
-  const [accountInfo, setAccountInfo] = useState<Record<string, { handle?: string; follower_count?: number; last_synced_at?: string }>>({});
+  const [accountInfo, setAccountInfo] = useState<Record<string, { id?: string; handle?: string; follower_count?: number; last_synced_at?: string }>>({});
   const [syncing, setSyncing] = useState(false);
 
   const loadAccounts = () =>
-    accountsApi.list().then((accounts: { platform: string; handle?: string; follower_count?: number; last_synced_at?: string }[]) => {
+    accountsApi.list().then((accounts: { id: string; platform: string; handle?: string; follower_count?: number; last_synced_at?: string }[]) => {
       setConnectedPlatforms(accounts.map((a) => a.platform));
-      const info: Record<string, { handle?: string; follower_count?: number; last_synced_at?: string }> = {};
-      accounts.forEach((a) => { info[a.platform] = { handle: a.handle, follower_count: a.follower_count, last_synced_at: a.last_synced_at }; });
+      const info: Record<string, { id?: string; handle?: string; follower_count?: number; last_synced_at?: string }> = {};
+      accounts.forEach((a) => { info[a.platform] = { id: a.id, handle: a.handle, follower_count: a.follower_count, last_synced_at: a.last_synced_at }; });
       setAccountInfo(info);
     }).catch(() => {});
 
@@ -295,8 +295,13 @@ export default function SettingsPage() {
     }
   };
 
-  const disconnectPlatform = (platform: string) => {
+  const disconnectPlatform = async (platform: string) => {
+    const accountId = accountInfo[platform]?.id;
+    if (accountId) {
+      try { await accountsApi.disconnect(accountId); } catch {}
+    }
     setConnectedPlatforms((prev) => prev.filter((p) => p !== platform));
+    setAccountInfo((prev) => { const next = { ...prev }; delete next[platform]; return next; });
     toast.success(`${platform} disconnected`);
   };
 

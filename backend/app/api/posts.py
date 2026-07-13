@@ -10,7 +10,7 @@ from ..mock.data import MOCK_POSTS
 from ..core.config import settings
 from ..services.publishers import publish_to_instagram, publish_to_twitter, publish_to_tiktok, publish_to_linkedin, publish_to_facebook, fetch_instagram_insights
 from ..services.token_refresh import ensure_tiktok_token
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid, random
 
@@ -18,6 +18,9 @@ router = APIRouter(prefix="/posts", tags=["posts"])
 
 
 def _post_to_dict(p: Post) -> dict:
+    queue_slot = None
+    if p.scheduled_at and p.status == "queued":
+        queue_slot = p.scheduled_at.strftime("%-I:%M %p") if hasattr(p.scheduled_at, "strftime") else None
     return {
         "id": p.id,
         "caption": p.caption,
@@ -27,6 +30,7 @@ def _post_to_dict(p: Post) -> dict:
         "status": p.status,
         "scheduled_at": p.scheduled_at.isoformat() if p.scheduled_at else None,
         "published_at": p.published_at.isoformat() if p.published_at else None,
+        "queue_slot": queue_slot,
         "ai_generated": p.ai_generated,
         "predicted_engagement_score": p.predicted_engagement_score,
         "sentiment": p.sentiment,
@@ -36,6 +40,43 @@ def _post_to_dict(p: Post) -> dict:
         "platform_account_ids": p.platform_account_ids or [],
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
+
+
+def _next_best_slot(db: Session, user_id: str, platforms: list[str]) -> datetime:
+    """Return the next optimal posting datetime based on audience data or benchmarks."""
+    from ..models.audience_snapshot import AudienceSnapshot
+
+    best_hour = None
+
+    if "instagram" in platforms:
+        account = db.query(SocialAccount).filter(
+            SocialAccount.user_id == user_id,
+            SocialAccount.platform == "instagram",
+            SocialAccount.is_connected == True,
+        ).first()
+        if account:
+            snapshots = db.query(AudienceSnapshot).filter(
+                AudienceSnapshot.account_id == account.id,
+            ).all()
+            if snapshots:
+                sums: dict[int, float] = {}
+                counts: dict[int, int] = {}
+                for snap in snapshots:
+                    for hour_str, value in (snap.hourly_counts or {}).items():
+                        h = int(hour_str)
+                        sums[h] = sums.get(h, 0) + int(value)
+                        counts[h] = counts.get(h, 0) + 1
+                if sums:
+                    best_hour = max(sums, key=lambda h: sums[h] / counts[h])
+
+    if best_hour is None:
+        best_hour = 18  # 6 PM benchmark default
+
+    now = datetime.now(timezone.utc)
+    candidate = now.replace(hour=best_hour, minute=0, second=0, microsecond=0)
+    if candidate <= now:
+        candidate = candidate + timedelta(days=1)
+    return candidate
 
 
 @router.get("")
@@ -195,6 +236,26 @@ def create_post(
     effective_type = body.media_type
     if effective_type == "image" and len(media_urls) > 1:
         effective_type = "carousel"
+
+    # Queue mode: assign a smart scheduled_at and save without publishing now
+    if body.queue:
+        slot = _next_best_slot(db, current_user.id, body.platform_account_ids)
+        post = Post(
+            id=str(uuid.uuid4()),
+            user_id=current_user.id,
+            caption=body.caption,
+            hashtags=body.hashtags,
+            media_urls=media_urls,
+            media_type=effective_type,
+            status="queued",
+            scheduled_at=slot,
+            platform_account_ids=body.platform_account_ids,
+            predicted_engagement_score=random.randint(70, 95),
+        )
+        db.add(post)
+        db.commit()
+        db.refresh(post)
+        return {**_post_to_dict(post), "publish_results": [], "queued": True}
 
     publish_results: list[dict] = []
     platform_post_ids: dict[str, str] = {}

@@ -11,6 +11,7 @@ class PostCreate(BaseModel):
     media_type: str = "none"
     platform_account_ids: List[str]
     scheduled_at: Optional[datetime] = None
+    queue: bool = False  # when True, auto-assign scheduled_at from best-time data
 
 
 class PostUpdate(BaseModel):
