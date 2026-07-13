@@ -60,6 +60,7 @@ export const postsApi = {
   delete: (id: string) => api.delete(`/posts/${id}`).then((r) => r.data),
   analytics: (id: string) => api.get(`/posts/${id}/analytics`).then((r) => r.data),
   addToQueue: (body: Record<string, unknown>) => api.post("/posts/queue", body).then((r) => r.data),
+  nextSlot: (platforms: string[]) => api.get(`/posts/next-slot?platforms=${platforms.join(",")}`).then((r) => r.data),
   retry: (id: string) => api.post(`/posts/${id}/retry`).then((r) => r.data),
 };
 

@@ -20,7 +20,10 @@ router = APIRouter(prefix="/posts", tags=["posts"])
 def _post_to_dict(p: Post) -> dict:
     queue_slot = None
     if p.scheduled_at and p.status == "queued":
-        queue_slot = p.scheduled_at.strftime("%-I:%M %p") if hasattr(p.scheduled_at, "strftime") else None
+        try:
+            queue_slot = p.scheduled_at.strftime("%I:%M %p").lstrip("0")
+        except Exception:
+            queue_slot = None
     return {
         "id": p.id,
         "caption": p.caption,
@@ -42,41 +45,103 @@ def _post_to_dict(p: Post) -> dict:
     }
 
 
+# Industry-benchmark best slots (day_of_week 0=Mon, hour) per platform.
+# Used only when no real audience data exists.
+_PLATFORM_BENCHMARKS: dict[str, list[tuple[int, int]]] = {
+    "instagram":  [(2, 11), (4, 11), (1, 10), (3, 13), (0, 9)],   # Wed/Fri 11 AM first
+    "facebook":   [(2, 13), (4, 11), (1, 9),  (3, 14), (0, 10)],
+    "twitter":    [(0, 8),  (1, 8),  (2, 8),  (3, 8),  (4, 8)],   # weekday mornings
+    "linkedin":   [(1, 9),  (2, 9),  (3, 9),  (0, 10), (4, 10)],  # Tue-Thu 9 AM
+    "tiktok":     [(1, 19), (4, 19), (2, 15), (3, 19), (5, 11)],  # evening peak
+}
+_DEFAULT_BENCHMARKS = [(2, 18), (4, 18), (1, 18), (3, 18), (0, 18)]  # 6 PM fallback
+_MIN_SLOT_GAP = timedelta(hours=2)  # minimum gap between queued posts
+
+
 def _next_best_slot(db: Session, user_id: str, platforms: list[str]) -> datetime:
-    """Return the next optimal posting datetime based on audience data or benchmarks."""
+    """Return the next optimal posting datetime, avoiding collisions with existing queued posts."""
     from ..models.audience_snapshot import AudienceSnapshot
 
-    best_hour = None
+    now = datetime.now(timezone.utc)
 
-    if "instagram" in platforms:
+    # Collect already-queued scheduled_at times for this user so we don't stack posts.
+    queued_times = [
+        p.scheduled_at for p in db.query(Post).filter(
+            Post.user_id == user_id,
+            Post.status == "queued",
+            Post.scheduled_at > now,
+        ).all()
+        if p.scheduled_at
+    ]
+
+    # Build ranked (day_of_week, hour) candidates from real audience data first.
+    # day_of_week score matrix: {(dow, hour): avg_online_followers}
+    scored: dict[tuple[int, int], float] = {}
+    primary_platform = next((p for p in ("instagram", "facebook") if p in platforms), None)
+
+    if primary_platform:
         account = db.query(SocialAccount).filter(
             SocialAccount.user_id == user_id,
-            SocialAccount.platform == "instagram",
+            SocialAccount.platform == primary_platform,
             SocialAccount.is_connected == True,
         ).first()
         if account:
             snapshots = db.query(AudienceSnapshot).filter(
                 AudienceSnapshot.account_id == account.id,
             ).all()
-            if snapshots:
-                sums: dict[int, float] = {}
-                counts: dict[int, int] = {}
-                for snap in snapshots:
-                    for hour_str, value in (snap.hourly_counts or {}).items():
-                        h = int(hour_str)
-                        sums[h] = sums.get(h, 0) + int(value)
-                        counts[h] = counts.get(h, 0) + 1
-                if sums:
-                    best_hour = max(sums, key=lambda h: sums[h] / counts[h])
+            # Each snapshot has a day_of_week and hourly_counts {hour_str: count}
+            sums: dict[tuple[int, int], float] = {}
+            counts_map: dict[tuple[int, int], int] = {}
+            for snap in snapshots:
+                dow = snap.day_of_week
+                for hour_str, value in (snap.hourly_counts or {}).items():
+                    key = (dow, int(hour_str))
+                    sums[key] = sums.get(key, 0.0) + float(value)
+                    counts_map[key] = counts_map.get(key, 0) + 1
+            for key in sums:
+                scored[key] = sums[key] / counts_map[key]
 
-    if best_hour is None:
-        best_hour = 18  # 6 PM benchmark default
+    # Build ranked list: real audience data if available, otherwise per-platform benchmarks.
+    if scored:
+        ranked = sorted(scored, key=lambda k: scored[k], reverse=True)
+    else:
+        benchmarks = _PLATFORM_BENCHMARKS.get(platforms[0] if platforms else "", _DEFAULT_BENCHMARKS)
+        ranked = benchmarks  # type: ignore[assignment]
 
-    now = datetime.now(timezone.utc)
-    candidate = now.replace(hour=best_hour, minute=0, second=0, microsecond=0)
-    if candidate <= now:
-        candidate = candidate + timedelta(days=1)
-    return candidate
+    # Walk the ranked list and find the earliest future slot with no collision.
+    for dow, hour in ranked:
+        # Find the next calendar occurrence of this (day_of_week, hour).
+        days_ahead = (dow - now.weekday()) % 7
+        candidate = (now + timedelta(days=days_ahead)).replace(
+            hour=hour, minute=0, second=0, microsecond=0
+        )
+        if candidate <= now:
+            candidate += timedelta(days=7)
+        # Accept this slot if no existing queued post is within the gap window.
+        too_close = any(abs((candidate - qt).total_seconds()) < _MIN_SLOT_GAP.total_seconds() for qt in queued_times)
+        if not too_close:
+            return candidate
+
+    # All preferred slots are blocked - push the latest queued time forward by gap.
+    if queued_times:
+        return max(queued_times) + _MIN_SLOT_GAP
+    return now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=2)
+
+
+@router.get("/next-slot")
+def get_next_slot(
+    platforms: str = "instagram",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Preview when the next smart queue slot would be without creating a post."""
+    platform_list = [p.strip() for p in platforms.split(",") if p.strip()]
+    slot = _next_best_slot(db, current_user.id, platform_list)
+    try:
+        label = slot.strftime("%A, %b %-d at %I:%M %p").replace(" 0", " ")
+    except Exception:
+        label = slot.strftime("%A, %b %d at %I:%M %p")
+    return {"scheduled_at": slot.isoformat(), "label": label}
 
 
 @router.get("")

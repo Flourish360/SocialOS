@@ -55,6 +55,14 @@ export default function ComposePage() {
   const [mediaLibrary, setMediaLibrary] = useState<any[]>([]);
   const [attachedMedia, setAttachedMedia] = useState<{ id: string; url: string; type: string } | null>(null);
   const [attachedMediaList, setAttachedMediaList] = useState<{ id: string; url: string; type: string }[]>([]);
+  const [nextSlotLabel, setNextSlotLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedPlatforms.length) { setNextSlotLabel(null); return; }
+    postsApi.nextSlot(selectedPlatforms)
+      .then((d: { label: string }) => setNextSlotLabel(d.label))
+      .catch(() => setNextSlotLabel(null));
+  }, [selectedPlatforms]);
 
   useEffect(() => {
     try {
@@ -384,7 +392,10 @@ export default function ComposePage() {
                   Rewrite
                 </button>
                 <button onClick={() => setShowSchedule(true)} className="btn-secondary flex items-center gap-1.5 text-xs"><Calendar className="w-3.5 h-3.5" />Schedule</button>
-                <button onClick={addToQueue} disabled={publishing} className="btn-secondary flex items-center gap-1.5 text-xs"><Clock className="w-3.5 h-3.5" />Add to Queue</button>
+                <div className="flex flex-col items-start gap-0.5">
+                  <button onClick={addToQueue} disabled={publishing} className="btn-secondary flex items-center gap-1.5 text-xs"><Clock className="w-3.5 h-3.5" />Add to Queue</button>
+                  {nextSlotLabel && <span className="text-[10px] text-slate-400 pl-1">Next: {nextSlotLabel}</span>}
+                </div>
                 <button onClick={publish} disabled={publishing} className="btn-primary flex items-center gap-1.5 text-xs">
                   {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   Publish now
