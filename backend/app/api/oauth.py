@@ -52,6 +52,13 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
             f"&response_type=code&scope=user.info.basic,video.upload"
             f"&redirect_uri={TIKTOK_CALLBACK}&state={uid}"
         ) if settings.TIKTOK_CLIENT_ID else None,
+        "facebook": (
+            f"https://www.facebook.com/v21.0/dialog/oauth"
+            f"?client_id={settings.META_APP_ID}"
+            f"&redirect_uri={FACEBOOK_CALLBACK}"
+            f"&scope=pages_manage_posts,pages_read_engagement,pages_show_list"
+            f"&state={uid}&response_type=code"
+        ) if settings.META_APP_ID else None,
     }
     url = urls.get(platform)
     if not url:
@@ -340,3 +347,97 @@ async def tiktok_callback(code: str, state: str = "", db: Session = Depends(get_
     _upsert_account(db, state, "tiktok", data["access_token"], data.get("refresh_token"),
                     handle=handle, platform_user_id=open_id, token_expires_at=token_expires_at)
     return RedirectResponse(_settings_redirect("tiktok"))
+
+
+# ── Facebook ──────────────────────────────────────────────────────────────────
+
+FACEBOOK_CALLBACK = "https://socialos-production-1712.up.railway.app/api/oauth/facebook/callback"
+FB_GRAPH = "https://graph.facebook.com/v21.0"
+
+
+@router.get("/facebook")
+def facebook_auth(current_user: User = Depends(get_current_user)):
+    if not settings.META_APP_ID:
+        raise HTTPException(400, "META_APP_ID not configured — add it to Railway variables")
+    url = (
+        f"https://www.facebook.com/v21.0/dialog/oauth"
+        f"?client_id={settings.META_APP_ID}"
+        f"&redirect_uri={FACEBOOK_CALLBACK}"
+        f"&scope=pages_manage_posts,pages_read_engagement,pages_show_list"
+        f"&state={current_user.id}"
+        f"&response_type=code"
+    )
+    return {"url": url}
+
+
+@router.get("/facebook/callback")
+async def facebook_callback(code: str, state: str = "", db: Session = Depends(get_db)):
+    if not state or not settings.META_APP_ID:
+        return RedirectResponse(_error_redirect("oauth_failed"))
+
+    async with httpx.AsyncClient() as client:
+        # Exchange code for short-lived user token
+        token_resp = await client.get(
+            f"{FB_GRAPH}/oauth/access_token",
+            params={
+                "client_id": settings.META_APP_ID,
+                "client_secret": settings.META_APP_SECRET,
+                "redirect_uri": FACEBOOK_CALLBACK,
+                "code": code,
+            },
+        )
+        token_data = token_resp.json()
+
+    if "access_token" not in token_data:
+        return RedirectResponse(_error_redirect("token_exchange_failed"))
+
+    short_token = token_data["access_token"]
+
+    # Exchange for long-lived user token (~60 days)
+    async with httpx.AsyncClient() as client:
+        long_resp = await client.get(
+            f"{FB_GRAPH}/oauth/access_token",
+            params={
+                "grant_type": "fb_exchange_token",
+                "client_id": settings.META_APP_ID,
+                "client_secret": settings.META_APP_SECRET,
+                "fb_exchange_token": short_token,
+            },
+        )
+        long_data = long_resp.json()
+        long_token = long_data.get("access_token", short_token)
+
+    # Get the user's Facebook Pages — we publish to the first Page found.
+    # Page tokens from /me/accounts are permanent (never expire).
+    async with httpx.AsyncClient() as client:
+        pages_resp = await client.get(
+            f"{FB_GRAPH}/me/accounts",
+            params={"access_token": long_token, "fields": "id,name,access_token"},
+        )
+        pages_data = pages_resp.json()
+
+    pages = pages_data.get("data") or []
+    if not pages:
+        # No pages — fall back to connecting the personal profile (limited publishing)
+        async with httpx.AsyncClient() as client:
+            me_resp = await client.get(
+                f"{FB_GRAPH}/me",
+                params={"access_token": long_token, "fields": "id,name"},
+            )
+            me = me_resp.json()
+        page_id = me.get("id", "")
+        page_name = me.get("name", "Facebook Profile")
+        page_token = long_token
+    else:
+        page = pages[0]
+        page_id = page["id"]
+        page_name = page.get("name", "Facebook Page")
+        page_token = page.get("access_token", long_token)
+
+    _upsert_account(
+        db, state, "facebook",
+        access_token=page_token,
+        platform_user_id=page_id,
+        handle=page_name,
+    )
+    return RedirectResponse(_settings_redirect("facebook"))

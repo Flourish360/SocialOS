@@ -9,7 +9,7 @@ def _publish_due_posts():
     from .db.database import SessionLocal
     from .models.post import Post
     from .models.social_account import SocialAccount
-    from .services.publishers import publish_to_instagram, publish_to_twitter, publish_to_tiktok, publish_to_linkedin
+    from .services.publishers import publish_to_instagram, publish_to_twitter, publish_to_tiktok, publish_to_linkedin, publish_to_facebook
 
     db = SessionLocal()
     try:
@@ -86,11 +86,27 @@ def _publish_due_posts():
                         any_success = True
                         if result.get("post_id"):
                             ids = dict(post.platform_post_ids or {})
-                            ids["tiktok"] = result["post_id"]
+                            ids["linkedin"] = result["post_id"]
                             post.platform_post_ids = ids
-                        logger.info("Scheduled post %s sent to TikTok inbox: %s", post.id, result.get("post_id"))
+                        logger.info("Scheduled post %s published to LinkedIn: %s", post.id, result.get("post_id"))
                     else:
-                        logger.warning("Scheduled post %s failed on TikTok: %s", post.id, result.get("error"))
+                        logger.warning("Scheduled post %s failed on LinkedIn: %s", post.id, result.get("error"))
+                elif platform == "facebook":
+                    result = publish_to_facebook(
+                        access_token=account.access_token,
+                        page_id=account.platform_user_id,
+                        caption=full_caption,
+                        media_urls=post.media_urls or [],
+                    )
+                    if result.get("success"):
+                        any_success = True
+                        if result.get("post_id"):
+                            ids = dict(post.platform_post_ids or {})
+                            ids["facebook"] = result["post_id"]
+                            post.platform_post_ids = ids
+                        logger.info("Scheduled post %s published to Facebook: %s", post.id, result.get("post_id"))
+                    else:
+                        logger.warning("Scheduled post %s failed on Facebook: %s", post.id, result.get("error"))
 
             post.status = "published" if any_success else "failed"
             post.published_at = now if any_success else None

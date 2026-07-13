@@ -404,6 +404,54 @@ def publish_to_linkedin(
         return {"success": False, "error": str(e)}
 
 
+FB_API = "https://graph.facebook.com/v21.0"
+
+
+def publish_to_facebook(
+    access_token: str,
+    page_id: str,
+    caption: str,
+    media_urls: list[str] | None = None,
+) -> dict:
+    """Publish a text or photo post to a Facebook Page via the Graph API.
+
+    Page tokens (stored during OAuth) are long-lived and never expire.
+    Returns {"success": True, "post_id": "..."} or {"success": False, "error": "..."}.
+    """
+    text = caption if len(caption) <= 63206 else caption[:63203] + "..."
+
+    try:
+        with httpx.Client(timeout=30) as client:
+            if media_urls:
+                # Photo post — publishes the image and the caption together
+                resp = client.post(
+                    f"{FB_API}/{page_id}/photos",
+                    params={
+                        "url": media_urls[0],
+                        "caption": text,
+                        "access_token": access_token,
+                    },
+                )
+            else:
+                # Text-only post
+                resp = client.post(
+                    f"{FB_API}/{page_id}/feed",
+                    params={
+                        "message": text,
+                        "access_token": access_token,
+                    },
+                )
+
+        data = resp.json() if resp.content else {}
+        if "id" in data:
+            return {"success": True, "post_id": data["id"]}
+        error = (data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
+        return {"success": False, "error": str(error)}
+    except Exception as e:
+        log.warning("Facebook publish failed: %s", e)
+        return {"success": False, "error": str(e)}
+
+
 def fetch_instagram_insights(access_token: str, media_id: str, media_type: str = "image") -> dict:
     """Fetch real engagement metrics for a published Instagram post.
 

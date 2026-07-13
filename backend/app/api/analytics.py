@@ -271,8 +271,12 @@ def audience_heatmap(
 
 
 @router.post("/ask", response_model=NLQResponse)
-def natural_language_query(body: NLQRequest, current_user: User = Depends(get_current_user)):
-    """Natural-language analytics. Routes to Claude in production with the user's metrics as context."""
+def natural_language_query(
+    body: NLQRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Natural-language analytics powered by Claude — answers questions about the user's real data."""
     if settings.USE_MOCK_DATA:
         q = body.question.lower()
         if "grew" in q or "growth" in q:
@@ -284,7 +288,66 @@ def natural_language_query(body: NLQRequest, current_user: User = Depends(get_cu
             )
         return NLQResponse(answer=f"I analyzed your data for: \"{body.question}\".", chart_type="none")
 
+    # Gather the user's real metrics to give Claude full context
+    accounts = db.query(SocialAccount).filter(
+        SocialAccount.user_id == current_user.id,
+        SocialAccount.is_connected == True,
+    ).all()
+    published = db.query(Post).filter(
+        Post.user_id == current_user.id,
+        Post.status == "published",
+    ).order_by(Post.published_at.desc()).limit(30).all()
+
+    platform_lines = []
+    for a in accounts:
+        platform_lines.append(
+            f"  - {a.platform}: {a.follower_count or 0:,} followers, {a.post_count or 0} posts, "
+            f"handle={a.handle}"
+        )
+
+    total_eng = sum(p.total_engagements or 0 for p in published)
+    total_reach = sum(p.total_reach or 0 for p in published)
+    avg_eng = round((total_eng / max(total_reach, 1)) * 100, 2)
+    posts_last_7 = sum(
+        1 for p in published
+        if p.published_at and p.published_at >= datetime.now(timezone.utc) - timedelta(days=7)
+    )
+
+    context = f"""User's social media data summary:
+Connected platforms:
+{chr(10).join(platform_lines) if platform_lines else "  (none connected yet)"}
+
+Published posts (last 30): {len(published)}
+Posts in last 7 days: {posts_last_7}
+Total reach across all posts: {total_reach:,}
+Total engagements: {total_eng:,}
+Average engagement rate: {avg_eng}%"""
+
+    from ..api.ai import _claude_client, _safe_claude_call, _text, MODEL
+    client = _claude_client()
+    if not client:
+        return NLQResponse(
+            answer="AI analysis requires ANTHROPIC_API_KEY — add it to Railway environment variables.",
+            chart_type="none",
+        )
+
+    resp = _safe_claude_call(lambda: client.messages.create(
+        model=MODEL,
+        max_tokens=300,
+        system=(
+            "You are SocialOS AI, an expert social media analytics assistant. "
+            "Answer the user's question concisely using their real data provided below. "
+            "Be specific, actionable, and data-driven. Keep the answer under 200 words. "
+            "If the data is sparse, acknowledge it and give general guidance. "
+            f"\n\n{context}"
+        ),
+        messages=[{"role": "user", "content": body.question}],
+    ))
+
+    if resp:
+        return NLQResponse(answer=_text(resp), chart_type="none")
+
     return NLQResponse(
-        answer="Not enough data yet — publish a few more posts and check back. I'll have insights once Instagram analytics roll in.",
+        answer="Could not reach AI — check ANTHROPIC_API_KEY in Railway.",
         chart_type="none",
     )
