@@ -37,10 +37,24 @@ export default function QueuePage() {
 
   const publishNow = async (post: any) => {
     setPublishing(post.id);
-    await new Promise((r) => setTimeout(r, 900));
-    setPosts((prev) => prev.filter((p) => p.id !== post.id));
-    toast.success("Published!");
-    setPublishing(null);
+    try {
+      const result = await postsApi.retry(post.id);
+      const results: any[] = result.publish_results ?? [];
+      const successes = results.filter((r: any) => r.success);
+      const failures = results.filter((r: any) => !r.success);
+      if (successes.length > 0) {
+        setPosts((prev) => prev.filter((p) => p.id !== post.id));
+        toast.success(`Published to ${successes.map((r: any) => r.platform).join(", ")}!`);
+      } else if (failures.length > 0) {
+        toast.error(failures[0].error ?? "Publish failed");
+      } else {
+        toast.error("Publish failed — check your connected accounts");
+      }
+    } catch {
+      toast.error("Publish failed — try again");
+    } finally {
+      setPublishing(null);
+    }
   };
 
   const moveUp = (index: number) => {

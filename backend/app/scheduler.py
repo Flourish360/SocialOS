@@ -127,6 +127,34 @@ def _sync_all_instagram_accounts():
         db.close()
 
 
+def _capture_follower_snapshots():
+    """Once a day, snapshot follower counts for every connected account so
+    the follower growth chart has real historical data to plot."""
+    from .db.database import SessionLocal
+    from .models.social_account import SocialAccount
+    from .models.follower_snapshot import FollowerSnapshot
+
+    db = SessionLocal()
+    try:
+        accounts = db.query(SocialAccount).filter(
+            SocialAccount.is_connected == True,
+        ).all()
+        for account in accounts:
+            if account.follower_count:
+                db.add(FollowerSnapshot(
+                    user_id=account.user_id,
+                    platform=account.platform,
+                    follower_count=account.follower_count,
+                ))
+        db.commit()
+        logger.info("Captured follower snapshots for %d account(s)", len(accounts))
+    except Exception:
+        logger.exception("Scheduler error during follower snapshot capture")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def _capture_audience_snapshots():
     """Once a day, capture each connected Instagram account's real hourly online-follower
     activity so /ai/best-time and /analytics/heatmap can build a genuine weekly pattern
@@ -170,4 +198,5 @@ def _capture_audience_snapshots():
 scheduler = BackgroundScheduler()
 scheduler.add_job(_publish_due_posts, "interval", minutes=1, id="publish_scheduled_posts")
 scheduler.add_job(_sync_all_instagram_accounts, "interval", hours=1, id="sync_instagram_accounts")
+scheduler.add_job(_capture_follower_snapshots, "interval", hours=24, id="capture_follower_snapshots")
 scheduler.add_job(_capture_audience_snapshots, "interval", hours=24, id="capture_audience_snapshots")

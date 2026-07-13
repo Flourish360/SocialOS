@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone, timedelta
 from ..api.deps import get_current_user
 from ..db.database import get_db
 from ..models.user import User
@@ -36,16 +37,48 @@ def dashboard_summary(
         SocialAccount.is_connected == True,
     ).all()
 
-    # Sync any Instagram account that has never fetched live data
+    # Sync any account that has never fetched live data
     from ..services.instagram_sync import sync_instagram_account
+    from ..services.tiktok_sync import sync_tiktok_account
     for a in accounts:
         if a.platform == "instagram" and a.last_synced_at is None:
             sync_instagram_account(db, a)
+        if a.platform == "tiktok" and a.handle in ("", "pending", None):
+            sync_tiktok_account(db, a)
 
     total_impressions = sum(p.total_impressions or 0 for p in published)
     total_reach = sum(p.total_reach or 0 for p in published)
     total_engagements = sum(p.total_engagements or 0 for p in published)
     total_followers = sum(a.follower_count or 0 for a in accounts)
+    avg_eng_rate = round((total_engagements / max(total_reach, 1)) * 100, 2)
+
+    # Follower growth: compare current followers to snapshot from ~30 days ago
+    from ..models.follower_snapshot import FollowerSnapshot
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    old_snap = db.query(FollowerSnapshot).filter(
+        FollowerSnapshot.user_id == current_user.id,
+        FollowerSnapshot.captured_at <= thirty_days_ago,
+    ).order_by(FollowerSnapshot.captured_at.desc()).first()
+    old_total = old_snap.follower_count if old_snap else total_followers
+    follower_growth_pct = round(((total_followers - old_total) / max(old_total, 1)) * 100, 2)
+
+    # Health score: 0-100 based on posting frequency, engagement rate, account status
+    posts_last_7 = sum(
+        1 for p in published
+        if p.published_at and p.published_at >= datetime.now(timezone.utc) - timedelta(days=7)
+    )
+    frequency_score = min(100, posts_last_7 * 14)  # 7 posts/week = 100
+    engagement_score = min(100, avg_eng_rate * 10)  # 10% eng rate = 100
+    connection_score = min(100, len(accounts) * 25)  # 4 platforms = 100
+    health_score = round((frequency_score * 0.4) + (engagement_score * 0.4) + (connection_score * 0.2))
+
+    # Top platform by engagements
+    by_platform: dict[str, int] = {}
+    for p in published:
+        eng = p.total_engagements or 0
+        for plat in (p.platform_account_ids or []):
+            by_platform[plat] = by_platform.get(plat, 0) + eng
+    top_platform = max(by_platform, key=by_platform.get) if by_platform else (accounts[0].platform if accounts else None)
 
     return {
         "total_posts": len(published),
@@ -54,9 +87,10 @@ def dashboard_summary(
         "total_reach": total_reach,
         "total_engagements": total_engagements,
         "total_followers": total_followers,
-        "avg_engagement_rate": round((total_engagements / max(total_reach, 1)) * 100, 2),
-        "follower_growth_pct": 0,
-        "top_platform": "instagram" if published else None,
+        "avg_engagement_rate": avg_eng_rate,
+        "follower_growth_pct": follower_growth_pct,
+        "top_platform": top_platform,
+        "health_score": health_score,
         "ai_insights": [],
     }
 
@@ -115,20 +149,82 @@ def platform_metrics(
 def engagement_series(
     days: int = 30,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     if settings.USE_MOCK_DATA:
         return MOCK_ENGAGEMENT_SERIES[-days:]
-    return []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    posts = db.query(Post).filter(
+        Post.user_id == current_user.id,
+        Post.status == "published",
+        Post.published_at >= cutoff,
+    ).all()
+
+    by_date: dict[str, dict] = {}
+    for post in posts:
+        if not post.published_at:
+            continue
+        date_str = post.published_at.strftime("%Y-%m-%d")
+        row = by_date.setdefault(date_str, {
+            "date": date_str, "instagram": 0, "twitter": 0,
+            "linkedin": 0, "tiktok": 0, "total": 0,
+        })
+        eng = post.total_engagements or 0
+        for platform in (post.platform_account_ids or []):
+            if platform in row:
+                row[platform] += eng
+        row["total"] += eng
+
+    return sorted(by_date.values(), key=lambda r: r["date"])
 
 
 @router.get("/follower-series")
 def follower_series(
     days: int = 30,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     if settings.USE_MOCK_DATA:
         return MOCK_FOLLOWER_SERIES[-days:]
-    return []
+
+    from ..models.follower_snapshot import FollowerSnapshot
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    snapshots = db.query(FollowerSnapshot).filter(
+        FollowerSnapshot.user_id == current_user.id,
+        FollowerSnapshot.captured_at >= cutoff,
+    ).order_by(FollowerSnapshot.captured_at).all()
+
+    if not snapshots:
+        # No history yet — return today's current counts as a single data point
+        accounts = db.query(SocialAccount).filter(
+            SocialAccount.user_id == current_user.id,
+            SocialAccount.is_connected == True,
+        ).all()
+        if not accounts:
+            return []
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        row: dict = {"date": today, "instagram": 0, "twitter": 0, "linkedin": 0, "tiktok": 0, "total": 0}
+        for a in accounts:
+            if a.platform in row:
+                row[a.platform] = a.follower_count or 0
+            row["total"] += a.follower_count or 0
+        return [row]
+
+    # Aggregate snapshots by date
+    by_date: dict[str, dict] = {}
+    for snap in snapshots:
+        date_str = snap.captured_at.strftime("%Y-%m-%d")
+        row = by_date.setdefault(date_str, {
+            "date": date_str, "instagram": 0, "twitter": 0,
+            "linkedin": 0, "tiktok": 0, "total": 0,
+        })
+        if snap.platform in row:
+            row[snap.platform] += snap.follower_count
+        row["total"] += snap.follower_count
+
+    return sorted(by_date.values(), key=lambda r: r["date"])
 
 
 DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
