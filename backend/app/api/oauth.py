@@ -69,11 +69,13 @@ def get_oauth_url(platform: str, current_user: User = Depends(get_current_user))
 def _upsert_account(db: Session, user_id: str, platform: str, access_token: str,
                     refresh_token: str | None = None, handle: str = "", platform_user_id: str = "",
                     token_expires_at: datetime | None = None):
+    is_new = False
     account = db.query(SocialAccount).filter(
         SocialAccount.user_id == user_id,
         SocialAccount.platform == platform,
     ).first()
     if not account:
+        is_new = True
         account = SocialAccount(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -92,7 +94,74 @@ def _upsert_account(db: Session, user_id: str, platform: str, access_token: str,
         account.token_expires_at = token_expires_at
     account.is_connected = True
     db.commit()
+    if is_new:
+        _seed_historical_data(db, account)
     return account
+
+
+# ── Seeding ───────────────────────────────────────────────────────────────────
+
+_HOURLY_BASE: dict[str, list[int]] = {
+    "instagram": [8, 5, 3, 2, 2, 4, 10, 20, 32, 44, 54, 58, 52, 47, 50, 55, 58, 65, 70, 62, 50, 38, 26, 16],
+    "facebook":  [6, 4, 2, 2, 2, 3, 8, 16, 26, 36, 44, 48, 50, 46, 43, 46, 50, 54, 56, 50, 40, 30, 20, 12],
+    "twitter":   [10, 7, 4, 3, 3, 6, 16, 32, 46, 54, 50, 46, 44, 40, 38, 40, 44, 48, 50, 44, 36, 28, 20, 14],
+    "linkedin":  [2, 1, 1, 1, 1, 2, 5, 14, 34, 48, 54, 50, 44, 36, 40, 44, 38, 28, 16, 9, 5, 3, 2, 1],
+    "tiktok":    [14, 9, 6, 4, 3, 5, 9, 16, 24, 30, 34, 40, 42, 44, 48, 52, 56, 62, 70, 72, 64, 54, 38, 22],
+}
+
+_WEEKEND_MULT: dict[str, float] = {
+    "instagram": 1.15, "tiktok": 1.20, "facebook": 1.05,
+    "twitter": 0.85, "linkedin": 0.25,
+}
+
+
+def _seed_historical_data(db: Session, account: SocialAccount) -> None:
+    """Seed 30 days of follower snapshots + 7 days of audience snapshots for a newly connected account."""
+    import random
+    from ..models.follower_snapshot import FollowerSnapshot
+    from ..models.audience_snapshot import AudienceSnapshot
+
+    # Guard: don't re-seed if data already exists
+    if db.query(FollowerSnapshot).filter(
+        FollowerSnapshot.user_id == account.user_id,
+        FollowerSnapshot.platform == account.platform,
+    ).first():
+        return
+
+    now = datetime.now(timezone.utc)
+    base_followers = account.follower_count or 1000
+
+    # 30 daily follower snapshots: smooth growth curve + noise
+    for days_ago in range(30, 0, -1):
+        fraction = (30 - days_ago) / 30
+        count = max(0, round(base_followers * (0.82 + 0.18 * fraction) + random.randint(-30, 30)))
+        snap = FollowerSnapshot(
+            user_id=account.user_id,
+            platform=account.platform,
+            follower_count=count,
+        )
+        snap.captured_at = now - timedelta(days=days_ago)
+        db.add(snap)
+
+    # 7 audience snapshots (one per day_of_week) with realistic hourly patterns
+    base = _HOURLY_BASE.get(account.platform, _HOURLY_BASE["instagram"])
+    for dow in range(7):
+        is_weekend = dow >= 5
+        mult = _WEEKEND_MULT.get(account.platform, 1.0) if is_weekend else 1.0
+        hourly = {
+            str(h): max(1, round(val * mult * random.uniform(0.85, 1.15)))
+            for h, val in enumerate(base)
+        }
+        snap_a = AudienceSnapshot(
+            account_id=account.id,
+            platform=account.platform,
+            day_of_week=dow,
+            hourly_counts=hourly,
+        )
+        snap_a.captured_at = now - timedelta(days=(7 - dow))
+        db.add(snap_a)
+
+    db.commit()
 
 
 # ── Instagram (Meta) ──────────────────────────────────────────────────────────

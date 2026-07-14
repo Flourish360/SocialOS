@@ -51,6 +51,7 @@ export const analyticsApi = {
   followerSeries: (days = 30) => api.get(`/analytics/follower-series?days=${days}`).then((r) => r.data),
   heatmap: () => api.get("/analytics/heatmap").then((r) => r.data),
   ask: (question: string) => api.post("/analytics/ask", { question }).then((r) => r.data),
+  bestSlots: (platforms: string[]) => api.get(`/analytics/best-slots?platforms=${platforms.join(",")}`).then((r) => r.data),
 };
 
 export const postsApi = {

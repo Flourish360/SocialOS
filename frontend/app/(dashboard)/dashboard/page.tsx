@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Users, Eye, TrendingUp, CalendarCheck, Sparkles, Send, Loader2 } from "lucide-react";
+import { Users, Eye, TrendingUp, CalendarCheck, Sparkles, Send, Loader2, CheckCircle2, Circle, ArrowRight } from "lucide-react";
 import Header from "@/components/layout/Header";
 import MetricsCard from "@/components/dashboard/MetricsCard";
 import EngagementChart from "@/components/dashboard/EngagementChart";
@@ -8,6 +8,7 @@ import PlatformStatus from "@/components/dashboard/PlatformStatus";
 import AIInsightPanel from "@/components/dashboard/AIInsightPanel";
 import BestTimeWidget from "@/components/BestTimeWidget";
 import { analyticsApi, accountsApi, postsApi } from "@/lib/api";
+import Link from "next/link";
 import { formatNumber, cn } from "@/lib/utils";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell,
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const [quickCaption, setQuickCaption] = useState("");
   const [quickPlatforms, setQuickPlatforms] = useState<string[]>(["instagram"]);
   const [quickPosting, setQuickPosting] = useState(false);
+  const [postsCount, setPostsCount] = useState(0);
 
   const quickPost = async () => {
     if (!quickCaption.trim()) { toast.error("Write something first"); return; }
@@ -53,12 +55,14 @@ export default function DashboardPage() {
       analyticsApi.engagementSeries(30),
       analyticsApi.platforms(),
       accountsApi.list(),
+      postsApi.list("published"),
     ])
-      .then(([s, eng, plat, acc]) => {
+      .then(([s, eng, plat, acc, published]) => {
         setSummary(s);
         setEngSeries(eng);
         setPlatforms(plat);
         setAccounts(acc);
+        setPostsCount(Array.isArray(published) ? published.length : 0);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -82,6 +86,72 @@ export default function DashboardPage() {
       />
 
       <div className="flex-1 p-6 space-y-6">
+
+        {/* Onboarding checklist — shown until all steps done */}
+        {(() => {
+          const steps = [
+            {
+              done: accounts.length > 0,
+              label: "Connect a social account",
+              desc: "Link Instagram, LinkedIn, TikTok, or more",
+              href: "/settings",
+              cta: "Go to Settings",
+            },
+            {
+              done: postsCount > 0,
+              label: "Publish your first post",
+              desc: "Write and send a post across all your platforms",
+              href: "/compose",
+              cta: "Open Compose",
+            },
+            {
+              done: summary?.posts_scheduled > 0,
+              label: "Add a post to the queue",
+              desc: "Let smart scheduling pick the best time for you",
+              href: "/compose",
+              cta: "Compose + Queue",
+            },
+          ];
+          const doneCount = steps.filter((s) => s.done).length;
+          if (doneCount === steps.length) return null;
+          return (
+            <div className="card border border-violet-500/20 bg-violet-500/5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-white">Get started with SocialOS</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">{doneCount} of {steps.length} steps complete</p>
+                </div>
+                <div className="flex gap-1">
+                  {steps.map((s, i) => (
+                    <div key={i} className={cn("w-8 h-1.5 rounded-full transition-colors", s.done ? "bg-violet-500" : "bg-slate-700")} />
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                {steps.map((step, i) => (
+                  <div key={i} className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl border transition-colors",
+                    step.done ? "border-slate-800 opacity-50" : "border-slate-700 bg-slate-800/40",
+                  )}>
+                    {step.done
+                      ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      : <Circle className="w-4 h-4 text-slate-600 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("text-sm font-medium", step.done ? "line-through text-slate-500" : "text-white")}>{step.label}</p>
+                      <p className="text-xs text-slate-500">{step.desc}</p>
+                    </div>
+                    {!step.done && (
+                      <Link href={step.href} className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 shrink-0">
+                        {step.cta} <ArrowRight className="w-3 h-3" />
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Metrics row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricsCard

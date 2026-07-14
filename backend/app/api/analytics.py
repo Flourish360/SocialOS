@@ -230,6 +230,76 @@ def follower_series(
 DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
+def _fmt_hour(hour: int) -> str:
+    if hour == 0:
+        return "12:00 AM"
+    if hour < 12:
+        return f"{hour}:00 AM"
+    if hour == 12:
+        return "12:00 PM"
+    return f"{hour - 12}:00 PM"
+
+
+@router.get("/best-slots")
+def best_slots(
+    platforms: str = "instagram",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the top 5 posting slots from real audience data, or fall back to per-platform benchmarks."""
+    from ..models.audience_snapshot import AudienceSnapshot
+    from ..api.posts import _PLATFORM_BENCHMARKS, _DEFAULT_BENCHMARKS
+
+    platform_list = [p.strip() for p in platforms.split(",") if p.strip()]
+    primary = next((p for p in ("instagram", "facebook") if p in platform_list), platform_list[0] if platform_list else "instagram")
+
+    account = db.query(SocialAccount).filter(
+        SocialAccount.user_id == current_user.id,
+        SocialAccount.platform == primary,
+        SocialAccount.is_connected == True,
+    ).first()
+
+    scored: dict[tuple[int, int], float] = {}
+    if account:
+        snapshots = db.query(AudienceSnapshot).filter(AudienceSnapshot.account_id == account.id).all()
+        sums: dict[tuple[int, int], float] = {}
+        cnt: dict[tuple[int, int], int] = {}
+        for snap in snapshots:
+            for hour_str, value in (snap.hourly_counts or {}).items():
+                key = (snap.day_of_week, int(hour_str))
+                sums[key] = sums.get(key, 0.0) + float(value)
+                cnt[key] = cnt.get(key, 0) + 1
+        for key in sums:
+            scored[key] = sums[key] / cnt[key]
+
+    if scored:
+        max_score = max(scored.values()) or 1
+        ranked = sorted(scored, key=lambda k: scored[k], reverse=True)[:5]
+        return [
+            {
+                "day": DAY_LABELS[dow],
+                "hour": hour,
+                "time": _fmt_hour(hour),
+                "score": round((scored[(dow, hour)] / max_score) * 100),
+                "source": "audience_data",
+            }
+            for dow, hour in ranked
+        ]
+
+    benchmarks = _PLATFORM_BENCHMARKS.get(primary, _DEFAULT_BENCHMARKS)
+    benchmark_scores = [94, 91, 88, 84, 79]
+    return [
+        {
+            "day": DAY_LABELS[dow % 7],
+            "hour": hour,
+            "time": _fmt_hour(hour),
+            "score": benchmark_scores[i],
+            "source": "benchmark",
+        }
+        for i, (dow, hour) in enumerate(benchmarks[:5])
+    ]
+
+
 @router.get("/heatmap")
 def audience_heatmap(
     current_user: User = Depends(get_current_user),

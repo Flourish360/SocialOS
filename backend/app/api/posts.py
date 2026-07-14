@@ -19,11 +19,14 @@ router = APIRouter(prefix="/posts", tags=["posts"])
 
 def _post_to_dict(p: Post) -> dict:
     queue_slot = None
+    queue_date_label = None
     if p.scheduled_at and p.status == "queued":
         try:
-            queue_slot = p.scheduled_at.strftime("%I:%M %p").lstrip("0")
+            time_str = p.scheduled_at.strftime("%I:%M %p").lstrip("0")
+            queue_slot = time_str
+            queue_date_label = p.scheduled_at.strftime("%a, %b %d") + " at " + time_str
         except Exception:
-            queue_slot = None
+            pass
     return {
         "id": p.id,
         "caption": p.caption,
@@ -34,6 +37,7 @@ def _post_to_dict(p: Post) -> dict:
         "scheduled_at": p.scheduled_at.isoformat() if p.scheduled_at else None,
         "published_at": p.published_at.isoformat() if p.published_at else None,
         "queue_slot": queue_slot,
+        "queue_date_label": queue_date_label,
         "ai_generated": p.ai_generated,
         "predicted_engagement_score": p.predicted_engagement_score,
         "sentiment": p.sentiment,
