@@ -212,7 +212,7 @@ export default function DashboardPage() {
                 <XAxis type="number" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                 <YAxis type="category" dataKey="platform" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={68} />
                 <Tooltip
-                  formatter={(v: number) => [`${v}%`, "Eng. Rate"]}
+                  formatter={(v) => [`${v as number}%`, "Eng. Rate"]}
                   contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }}
                 />
                 <Bar dataKey="engagement_rate" radius={[0, 4, 4, 0]}>

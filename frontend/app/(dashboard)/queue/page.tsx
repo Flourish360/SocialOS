@@ -12,7 +12,7 @@ const PLATFORM_EMOJI: Record<string, string> = {
 };
 
 interface BestSlot { day: string; hour: number; time: string; score: number; source: string; }
-interface QueuedPost { id: string; caption: string; hashtags: string[]; platform_account_ids: string[]; queue_slot: string | null; queue_date_label: string | null; scheduled_at: string | null; predicted_engagement_score: number | null; }
+interface QueuedPost { id: string; caption: string; hashtags: string[]; platform_account_ids: string[]; status: string; queue_slot: string | null; queue_date_label: string | null; scheduled_at: string | null; predicted_engagement_score: number | null; }
 
 export default function QueuePage() {
   const [posts, setPosts] = useState<QueuedPost[]>([]);

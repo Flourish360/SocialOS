@@ -106,7 +106,7 @@ export default function PostAnalyticsModal({ postId, caption, onClose }: Props) 
                       <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatNumber(v)} />
                       <Tooltip
                         contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }}
-                        formatter={(v: number, name: string) => [formatNumber(v), name === "impressions" ? "Impressions" : "Engagements"]}
+                        formatter={(v, name) => [formatNumber(v as number), name === "impressions" ? "Impressions" : "Engagements"]}
                       />
                       <Area type="monotone" dataKey="impressions" stroke="#8b5cf6" strokeWidth={2} fill="url(#gradImpr)" />
                       <Area type="monotone" dataKey="engagements" stroke="#10b981" strokeWidth={2} fill="url(#gradEng)" />
@@ -132,7 +132,7 @@ export default function PostAnalyticsModal({ postId, caption, onClose }: Props) 
                       <BarChart data={data.platform_split} layout="vertical" margin={{ left: -10, right: 4 }}>
                         <XAxis type="number" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                         <YAxis type="category" dataKey="platform" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={64} />
-                        <Tooltip formatter={(v: number) => [`${v}%`, "Share"]} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
+                        <Tooltip formatter={(v) => [`${v as number}%`, "Share"]} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
                         <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
                           {data.platform_split.map((p: any) => (
                             <Cell key={p.platform} fill={PLATFORM_COLORS[p.platform] ?? "#8b5cf6"} />

@@ -132,7 +132,7 @@ export default function CompetitorsPage() {
               ]} margin={{ left: -20, right: 4 }}>
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
-                <Tooltip formatter={(v: number) => [`${v}%`, "Eng. Rate"]} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
+                <Tooltip formatter={(v) => [`${v as number}%`, "Eng. Rate"]} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
                 <Bar dataKey="engagement" radius={[4, 4, 0, 0]}>
                   {[...(myEngagement !== null ? [{ name: "You" }] : []), ...competitors].map((_, i) => (
                     <Cell key={i} fill={i === 0 ? "#8b5cf6" : COLORS[i % COLORS.length]} />
