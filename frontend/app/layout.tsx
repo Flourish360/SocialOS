@@ -5,6 +5,11 @@ import { Toaster } from "react-hot-toast";
 export const metadata: Metadata = {
   title: "SocialOS - AI Social Media Platform",
   description: "Compose, schedule, automate, and understand your social media with AI.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

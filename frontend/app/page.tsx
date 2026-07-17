@@ -93,7 +93,7 @@ export default function LandingPage() {
         <div className="relative max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 rounded-full px-4 py-1.5 text-violet-300 text-sm mb-8">
             <Sparkles className="w-3.5 h-3.5" />
-            Powered by GPT-4o
+            Powered by Claude AI
           </div>
           <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-white mb-6 leading-[1.1]">
             Your entire social media
@@ -213,6 +213,8 @@ export default function LandingPage() {
           <div className="flex items-center gap-6 text-sm text-slate-500">
             <Link href="/login" className="hover:text-slate-300 transition-colors">Sign in</Link>
             <Link href="/register" className="hover:text-slate-300 transition-colors">Register</Link>
+            <Link href="/terms" className="hover:text-slate-300 transition-colors">Terms</Link>
+            <Link href="/privacy" className="hover:text-slate-300 transition-colors">Privacy</Link>
             <a
               href="https://github.com/Flourish360/SocialOS"
               className="hover:text-slate-300 transition-colors"

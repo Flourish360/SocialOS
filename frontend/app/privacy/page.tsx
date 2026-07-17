@@ -2,6 +2,21 @@ export default function PrivacyPolicy() {
   return (
     <div style={{ background: "#0f1623", minHeight: "100vh", color: "#f1f5f9", fontFamily: "system-ui, sans-serif" }}>
       <div style={{ maxWidth: "760px", margin: "0 auto", padding: "60px 24px" }}>
+
+        {/* Logo header */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "48px" }}>
+          <div style={{
+            width: "40px", height: "40px", background: "#7c3aed", borderRadius: "10px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <img src="/icon.svg" alt="SocialOS" style={{ width: "40px", height: "40px", borderRadius: "10px" }} />
+          </div>
+          <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "#ffffff", letterSpacing: "-0.01em" }}>
+            SocialOS
+          </span>
+        </div>
+
         <h1 style={{ fontSize: "2rem", fontWeight: 700, marginBottom: "8px", color: "#ffffff" }}>
           Privacy Policy
         </h1>
