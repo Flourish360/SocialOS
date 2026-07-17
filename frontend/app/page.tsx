@@ -91,10 +91,6 @@ export default function LandingPage() {
       <section className="pt-40 pb-24 px-6 text-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(124,58,237,0.15),transparent)]" />
         <div className="relative max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 rounded-full px-4 py-1.5 text-violet-300 text-sm mb-8">
-            <Sparkles className="w-3.5 h-3.5" />
-            Powered by Claude AI
-          </div>
           <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-white mb-6 leading-[1.1]">
             Your entire social media
             <br />
