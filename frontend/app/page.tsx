@@ -66,9 +66,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 inset-x-0 z-50 bg-[#0b0f1a]/80 backdrop-blur border-b border-white/5">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
+            <img src="/icon.svg" alt="SocialOS" className="w-7 h-7 rounded-lg" />
             <span className="font-semibold text-white tracking-tight">SocialOS</span>
           </div>
           <div className="flex items-center gap-3">
@@ -205,9 +203,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/5 py-8 px-6">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-slate-500 text-sm">
-            <div className="w-5 h-5 bg-violet-600 rounded flex items-center justify-center">
-              <Sparkles className="w-3 h-3 text-white" />
-            </div>
+            <img src="/icon.svg" alt="SocialOS" className="w-5 h-5 rounded" />
             SocialOS - MIT License
           </div>
           <div className="flex items-center gap-6 text-sm text-slate-500">

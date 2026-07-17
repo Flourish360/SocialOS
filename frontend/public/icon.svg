@@ -1,4 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect width="32" height="32" rx="8" fill="#7c3aed"/>
-  <text x="16" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">S</text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1024"
+     height="1024"
+     viewBox="0 0 1024 1024">
+
+    <rect x="64" y="64" width="896" height="896" rx="190" fill="#7C3AED"/>
+
+    <path
+        d="
+            M512 255
+            C512 255 528 405 560 448
+            C603 480 753 512 753 512
+            C753 512 603 544 560 576
+            C528 619 512 769 512 769
+            C512 769 496 619 464 576
+            C421 544 271 512 271 512
+            C271 512 421 480 464 448
+            C496 405 512 255 512 255
+        "
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="42"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+    <path d="M730 245 L742 292 L789 304 L742 316 L730 363 L718 316 L671 304 L718 292 Z"
+        fill="#FFFFFF"/>
+
+    <path d="M320 585 L330 622 L367 632 L330 642 L320 679 L310 642 L273 632 L310 622 Z"
+        fill="#FFFFFF"/>
 </svg>
