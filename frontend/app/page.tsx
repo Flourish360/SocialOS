@@ -3,6 +3,7 @@ import {
   Sparkles, BarChart2, Calendar, Inbox, Zap, Image, ArrowRight,
   TrendingUp, Users, Clock, CheckCircle,
 } from "lucide-react";
+import FeatureCarousel from "@/components/FeatureCarousel";
 
 const FEATURES = [
   {
@@ -119,6 +120,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Carousel */}
+      <FeatureCarousel />
 
       {/* Stats */}
       <section className="py-16 px-6 border-y border-white/5 bg-white/[0.02]">
