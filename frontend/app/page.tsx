@@ -215,14 +215,6 @@ export default function LandingPage() {
             <Link href="/register" className="hover:text-slate-300 transition-colors">Register</Link>
             <Link href="/terms" className="hover:text-slate-300 transition-colors">Terms</Link>
             <Link href="/privacy" className="hover:text-slate-300 transition-colors">Privacy</Link>
-            <a
-              href="https://github.com/Flourish360/SocialOS"
-              className="hover:text-slate-300 transition-colors"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              GitHub
-            </a>
           </div>
         </div>
       </footer>
