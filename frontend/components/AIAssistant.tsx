@@ -83,12 +83,10 @@ export default function AIAssistant() {
 
       <div className="fixed right-0 top-0 h-full w-[380px] bg-slate-900 border-l border-slate-800 flex flex-col z-50 shadow-2xl animate-slide-in-right">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 shrink-0">
-          <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center shrink-0">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
+          <img src="/icon.svg" alt="SocialOS" className="w-8 h-8 rounded-lg shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-white">AI Assistant</p>
-            <p className="text-xs text-slate-400">Powered by GPT-4o</p>
+            <p className="text-xs text-slate-400">Powered by Claude AI</p>
           </div>
           <button
             onClick={() =>
