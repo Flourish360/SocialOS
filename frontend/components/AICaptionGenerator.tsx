@@ -62,9 +62,7 @@ export default function AICaptionGenerator({ onUse, onClose }: AICaptionGenerato
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-violet-600/20 rounded-lg">
-              <Sparkles className="w-4 h-4 text-violet-400" />
-            </div>
+            <img src="/icon.svg" alt="SocialOS" className="w-7 h-7 rounded-lg" />
             <span className="text-sm font-semibold text-white">AI Caption Generator</span>
             <span className="text-xs bg-violet-500/20 text-violet-400 border border-violet-500/30 rounded-full px-2 py-0.5">3 variants</span>
           </div>
