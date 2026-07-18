@@ -51,9 +51,7 @@ export default function Sidebar() {
     )}>
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 py-5 border-b border-slate-800">
-        <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center shrink-0">
-          <Sparkles className="w-4 h-4 text-white" />
-        </div>
+        <img src="/icon.svg" alt="SocialOS" className="w-8 h-8 rounded-lg shrink-0" />
         <span className="font-bold text-white tracking-tight">SocialOS</span>
       </div>
 
