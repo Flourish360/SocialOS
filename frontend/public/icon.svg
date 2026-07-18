@@ -1,32 +1,54 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg"
-     width="1024"
-     height="1024"
-     viewBox="0 0 1024 1024">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="44%" r="62%">
+      <stop offset="0%" stop-color="#4318C4"/>
+      <stop offset="100%" stop-color="#27088A"/>
+    </radialGradient>
+    <linearGradient id="sparkle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C4B5FD"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+  </defs>
 
-    <rect x="64" y="64" width="896" height="896" rx="190" fill="#7C3AED"/>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
 
-    <path
-        d="
-            M512 255
-            C512 255 528 405 560 448
-            C603 480 753 512 753 512
-            C753 512 603 544 560 576
-            C528 619 512 769 512 769
-            C512 769 496 619 464 576
-            C421 544 271 512 271 512
-            C271 512 421 480 464 448
-            C496 405 512 255 512 255
-        "
-        fill="none"
-        stroke="#FFFFFF"
-        stroke-width="42"
-        stroke-linecap="round"
-        stroke-linejoin="round"/>
+  <!-- Network connecting lines -->
+  <g stroke="white" stroke-width="25" stroke-linecap="round" fill="none">
+    <line x1="507" y1="212" x2="281" y2="438"/>
+    <line x1="507" y1="212" x2="502" y2="538"/>
+    <line x1="281" y1="438" x2="502" y2="538"/>
+    <line x1="281" y1="438" x2="302" y2="688"/>
+    <line x1="502" y1="538" x2="720" y2="538"/>
+    <line x1="502" y1="538" x2="302" y2="688"/>
+    <line x1="502" y1="538" x2="654" y2="703"/>
+    <line x1="502" y1="538" x2="497" y2="840"/>
+    <line x1="720" y1="538" x2="654" y2="703"/>
+    <line x1="302" y1="688" x2="497" y2="840"/>
+    <line x1="654" y1="703" x2="497" y2="840"/>
+  </g>
 
-    <path d="M730 245 L742 292 L789 304 L742 316 L730 363 L718 316 L671 304 L718 292 Z"
-        fill="#FFFFFF"/>
+  <!-- Network nodes (hollow circles on top of lines) -->
+  <g stroke="white" stroke-width="22" fill="#3415B2">
+    <circle cx="507" cy="212" r="34"/>
+    <circle cx="281" cy="438" r="34"/>
+    <circle cx="502" cy="538" r="44"/>
+    <circle cx="720" cy="538" r="34"/>
+    <circle cx="302" cy="688" r="34"/>
+    <circle cx="654" cy="703" r="34"/>
+    <circle cx="497" cy="840" r="34"/>
+  </g>
 
-    <path d="M320 585 L330 622 L367 632 L330 642 L320 679 L310 642 L273 632 L310 622 Z"
-        fill="#FFFFFF"/>
+  <!-- Accent dots flanking the sparkle -->
+  <circle cx="670" cy="210" r="17" fill="#A78BFA"/>
+  <circle cx="800" cy="438" r="12" fill="#A78BFA"/>
+
+  <!-- 4-pointed sparkle star (upper-right) -->
+  <path d="M762,222
+           C776,302 776,303 858,318
+           C776,333 776,334 762,414
+           C748,334 748,333 666,318
+           C748,303 748,302 762,222 Z"
+        fill="url(#sparkle)"/>
 </svg>
