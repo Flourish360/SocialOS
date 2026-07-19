@@ -13,3 +13,4 @@ python-dotenv==1.0.1
 anthropic>=0.40.0
 cloudinary>=1.40.0
 apscheduler==3.10.4
+slowapi==0.1.9
