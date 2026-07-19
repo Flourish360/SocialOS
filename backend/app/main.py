@@ -21,6 +21,8 @@ try:
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS platform_post_ids JSONB DEFAULT '{}'::jsonb"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS lockout_until TIMESTAMPTZ"))
 except Exception as e:
     import logging
     logging.getLogger(__name__).error("DB table creation failed: %s", e)

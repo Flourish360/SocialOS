@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Text
+from sqlalchemy import Column, String, Boolean, DateTime, Text, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -15,6 +15,10 @@ class User(Base):
     avatar_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+
+    # Login lockout
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    lockout_until = Column(DateTime(timezone=True), nullable=True)
 
     # Brand kit
     brand_name = Column(String, nullable=True)
