@@ -125,6 +125,7 @@ def _create_posts(
     platform_filter: list[str] | None,
     action: str,
     event_tag: str,
+    order_id: str | None = None,
 ) -> list[dict]:
     accounts = db.query(SocialAccount).filter(
         SocialAccount.user_id == user.id,
@@ -156,6 +157,7 @@ def _create_posts(
             published_at=now if is_live else None,
             scheduled_at=None if is_live else now,
             platform_account_ids=[account.id],
+            platform_post_ids={"_order_id": order_id} if order_id else {},
             ai_generated=True,
             content_type_tag=event_tag,
         )
@@ -219,6 +221,8 @@ class ProductRequest(BaseModel):
 
 
 class SaleRequest(BaseModel):
+    order_id: str
+    order_status: str  # must be "confirmed" — we reject everything else
     product_name: str
     price: float
     currency: str = "USD"
@@ -232,6 +236,18 @@ class SaleRequest(BaseModel):
     platforms: list[str] | None = None
     action: str = "post_now"    # post_now | queue
     template: str | None = None
+
+    @field_validator("order_status")
+    @classmethod
+    def status_must_be_confirmed(cls, v: str) -> str:
+        if v != "confirmed":
+            raise ValueError(
+                f"order_status '{v}' rejected. "
+                "SocialOS only posts on confirmed orders. "
+                "Never call this endpoint on payment initiation — "
+                "wait for your payment provider's order.confirmed webhook."
+            )
+        return v
 
     @field_validator("action")
     @classmethod
@@ -415,6 +431,20 @@ def ingest_sale(
 ):
     user, api_key = _resolve_api_key(x_api_key, db)
 
+    # Deduplicate: same order_id should never generate two posts.
+    # order_id is stored in platform_post_ids->_order_id at creation time.
+    from sqlalchemy import cast, String
+    duplicate = db.query(Post).filter(
+        Post.user_id == user.id,
+        Post.content_type_tag == "product_sold",
+        cast(Post.platform_post_ids["_order_id"], String) == f'"{body.order_id}"',
+    ).first()
+    if duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Order '{body.order_id}' has already been posted. Duplicate webhook ignored.",
+        )
+
     template_key = pick_template(
         units_remaining=body.units_remaining,
         buyer_location=body.buyer_location,
@@ -465,6 +495,7 @@ def ingest_sale(
         platform_filter=body.platforms,
         action=body.action,
         event_tag="product_sold",
+        order_id=body.order_id,
     )
 
     return {
