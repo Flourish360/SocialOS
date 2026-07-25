@@ -71,12 +71,11 @@ const STYLES = `
   }
   .docs-root .topbar-logo { display: flex; align-items: center; gap: 8px; }
   .docs-root .logo-mark {
-    width: 28px; height: 28px; border-radius: 8px;
-    background: var(--accent);
+    width: 28px; height: 28px; border-radius: 7px;
     display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+    flex-shrink: 0; overflow: hidden;
   }
-  .docs-root .logo-mark svg { width: 16px; height: 16px; }
+  .docs-root .logo-mark svg { width: 28px; height: 28px; display: block; }
   .docs-root .logo-name { font-weight: 700; font-size: 14px; letter-spacing: -0.2px; }
   .docs-root .logo-sep { color: var(--subtle); font-size: 18px; font-weight: 200; margin: 0 4px; }
   .docs-root .logo-sub { font-size: 13px; color: var(--muted); font-weight: 500; }
@@ -292,12 +291,43 @@ const BODY_HTML = `
 <div class="topbar">
   <div class="topbar-logo">
     <div class="logo-mark">
-      <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="10" cy="10" r="2.5" fill="white"/>
-        <line x1="10" y1="2" x2="10" y2="6.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="10" y1="13.5" x2="10" y2="18" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="2" y1="10" x2="6.5" y2="10" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="13.5" y1="10" x2="18" y2="10" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+        <defs>
+          <radialGradient id="doc-bg" cx="50%" cy="44%" r="64%">
+            <stop offset="0%" stop-color="#4318C4"/>
+            <stop offset="100%" stop-color="#270890"/>
+          </radialGradient>
+          <linearGradient id="doc-sparkle" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#C4B5FD"/>
+            <stop offset="100%" stop-color="#6D28D9"/>
+          </linearGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="230" fill="url(#doc-bg)"/>
+        <g stroke="#FFFFFF" stroke-width="26" stroke-linecap="round" fill="none">
+          <line x1="487" y1="207" x2="268" y2="432"/>
+          <line x1="487" y1="207" x2="478" y2="535"/>
+          <line x1="268" y1="432" x2="478" y2="535"/>
+          <line x1="268" y1="432" x2="294" y2="685"/>
+          <line x1="478" y1="535" x2="692" y2="535"/>
+          <line x1="478" y1="535" x2="294" y2="685"/>
+          <line x1="478" y1="535" x2="648" y2="698"/>
+          <line x1="478" y1="535" x2="478" y2="843"/>
+          <line x1="692" y1="535" x2="648" y2="698"/>
+          <line x1="294" y1="685" x2="478" y2="843"/>
+          <line x1="648" y1="698" x2="478" y2="843"/>
+        </g>
+        <g stroke="#FFFFFF" stroke-width="23">
+          <circle cx="487" cy="207" r="34" fill="#3016B8"/>
+          <circle cx="268" cy="432" r="34" fill="#2E14A8"/>
+          <circle cx="478" cy="535" r="45" fill="#3516B4"/>
+          <circle cx="692" cy="535" r="34" fill="#3016B0"/>
+          <circle cx="294" cy="685" r="34" fill="#2C12A4"/>
+          <circle cx="648" cy="698" r="34" fill="#2F14A8"/>
+          <circle cx="478" cy="843" r="34" fill="#2A1098"/>
+        </g>
+        <circle cx="643" cy="208" r="17" fill="#A78BFA"/>
+        <circle cx="782" cy="428" r="12" fill="#A78BFA"/>
+        <path d="M 750,218 C 768,300 768,300 850,318 C 768,336 768,336 750,418 C 732,336 732,336 650,318 C 732,300 732,300 750,218 Z" fill="url(#doc-sparkle)"/>
       </svg>
     </div>
     <span class="logo-name">SocialOS</span>
