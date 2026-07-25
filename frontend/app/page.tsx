@@ -9,7 +9,7 @@ const FEATURES = [
   {
     icon: Sparkles,
     title: "AI Caption Generator",
-    desc: "Generate platform-native captions in any tone — casual, professional, funny, or inspirational — in seconds.",
+    desc: "Generate platform-native captions in any tone: casual, professional, funny, or inspirational. Done in seconds.",
     color: "text-violet-400",
     bg: "bg-violet-500/10",
     border: "group-hover:border-violet-500/20",
@@ -130,7 +130,7 @@ export default function LandingPage() {
       {/* Announcement bar */}
       <div className="bg-violet-600/10 border-b border-violet-500/15 text-center py-2 px-4">
         <span className="text-xs text-violet-300">
-          <span className="font-semibold">New:</span> E-commerce API — auto-post products and sales from any store.{" "}
+          <span className="font-semibold">New:</span> E-commerce API: auto-post products and sales from any store.{" "}
           <Link href="/docs/ecommerce" className="underline underline-offset-2 hover:text-white transition-colors font-medium">
             View docs
           </Link>
@@ -190,7 +190,7 @@ export default function LandingPage() {
 
             <p className="text-lg text-slate-400 mb-8 leading-relaxed max-w-lg">
               SocialOS writes your captions, schedules posts at peak hours, replies to DMs, and shows you exactly
-              what is working — all from one dashboard.
+              what is working, all from one dashboard.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -242,7 +242,7 @@ export default function LandingPage() {
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    Poured with intention. Each mug is one of a kind — once it is gone, it is gone. Link in bio.
+                    Poured with intention. Each mug is one of a kind. Once it is gone, it is gone. Link in bio.
                   </p>
                   <p className="text-xs text-violet-400 mt-1">#ceramics #handmade #limitededition</p>
                 </div>
