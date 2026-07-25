@@ -35,10 +35,19 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Stream the response straight through — handles JSON, streaming AI, and file downloads.
+  // Forward response headers, stripping encoding headers that Node's fetch
+  // already handled (it decompresses gzip/br automatically, so forwarding
+  // Content-Encoding would cause the browser to double-decompress and fail).
+  const responseHeaders = new Headers();
+  for (const [key, value] of upstream.headers.entries()) {
+    const lower = key.toLowerCase();
+    if (lower === "content-encoding" || lower === "content-length") continue;
+    responseHeaders.set(key, value);
+  }
+
   return new NextResponse(upstream.body, {
     status:  upstream.status,
-    headers: upstream.headers,
+    headers: responseHeaders,
   });
 }
 
