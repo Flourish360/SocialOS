@@ -4,6 +4,7 @@ import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, field_validator
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
 from ..db.database import get_db
@@ -433,7 +434,6 @@ def ingest_sale(
 
     # Deduplicate: same order_id should never generate two posts.
     # order_id is stored in platform_post_ids->_order_id at creation time.
-    from sqlalchemy import cast, String
     duplicate = db.query(Post).filter(
         Post.user_id == user.id,
         Post.content_type_tag == "product_sold",
