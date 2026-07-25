@@ -34,7 +34,7 @@ _STYLE_RULES = (
 
 def _hash_key(raw: str) -> str:
     return hmac.new(
-        settings.SECRET_KEY.encode(),
+        settings.API_KEY_SECRET.encode(),
         raw.encode(),
         hashlib.sha256,
     ).hexdigest()

@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
+    # Separate secret for HMAC-SHA256 API key hashing — never changes even if SECRET_KEY rotates
+    API_KEY_SECRET: str = "dev-api-key-secret-change-in-production"
     FRONTEND_URL: str = "http://localhost:3000"
 
     # Default to SQLite for zero-config local dev; swap to PostgreSQL URL in .env for production
