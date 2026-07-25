@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -32,7 +33,11 @@ _STYLE_RULES = (
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _hash_key(raw: str) -> str:
-    return hashlib.sha256(raw.encode()).hexdigest()
+    return hmac.new(
+        settings.SECRET_KEY.encode(),
+        raw.encode(),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def _claude_client():
