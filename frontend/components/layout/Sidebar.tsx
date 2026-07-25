@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, PenSquare, Calendar, Zap, BarChart3,
   Inbox, Image, Users, Settings, Sparkles, ChevronRight,
-  LogOut, ListOrdered,
+  LogOut, ListOrdered, ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
@@ -21,6 +21,7 @@ const NAV = [
   { label: "Inbox", href: "/inbox", icon: Inbox },
   { label: "Media", href: "/media", icon: Image },
   { label: "Competitors", href: "/competitors", icon: Users },
+  { label: "Store Feed", href: "/store", icon: ShoppingBag },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

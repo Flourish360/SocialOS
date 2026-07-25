@@ -109,4 +109,11 @@ export const automationApi = {
   deleteCompetitor: (id: string) => api.delete(`/automation/competitors/${id}`).then((r) => r.data),
 };
 
+export const ecommerceApi = {
+  listKeys: () => api.get("/ecommerce/keys").then((r) => r.data),
+  createKey: (name: string) => api.post("/ecommerce/keys", { name }).then((r) => r.data),
+  revokeKey: (id: string) => api.delete(`/ecommerce/keys/${id}`),
+  feed: () => api.get("/ecommerce/feed").then((r) => r.data),
+};
+
 export default api;

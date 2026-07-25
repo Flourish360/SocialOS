@@ -10,9 +10,9 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from .core.config import settings
 from .api import auth, accounts, posts, analytics, ai, automation
-from .api import media, oauth
+from .api import media, oauth, ecommerce
 from .db.database import engine, Base
-from .models import user, social_account, post, audience_snapshot, follower_snapshot, automation_rule, competitor
+from .models import user, social_account, post, audience_snapshot, follower_snapshot, automation_rule, competitor, api_key
 from .scheduler import scheduler
 
 try:
@@ -23,6 +23,19 @@ try:
             conn.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS platform_post_ids JSONB DEFAULT '{}'::jsonb"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS lockout_until TIMESTAMPTZ"))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS api_keys (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    key_hash TEXT NOT NULL UNIQUE,
+                    key_prefix TEXT NOT NULL,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    last_used_at TIMESTAMPTZ
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_api_keys_key_hash ON api_keys(key_hash)"))
 except Exception as e:
     import logging
     logging.getLogger(__name__).error("DB table creation failed: %s", e)
@@ -99,6 +112,7 @@ app.include_router(ai.router, prefix="/api")
 app.include_router(automation.router, prefix="/api")
 app.include_router(media.router, prefix="/api")
 app.include_router(oauth.router, prefix="/api")
+app.include_router(ecommerce.router, prefix="/api")
 
 
 # ── Public routes ─────────────────────────────────────────────────────────────
