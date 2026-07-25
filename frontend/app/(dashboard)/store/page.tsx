@@ -352,7 +352,7 @@ export default function StorePage() {
                 <Key className="w-4 h-4 text-violet-400" /> How to connect your store
               </h3>
               <a
-                href="https://claude.ai/code/artifact/8bb8bf3f-6667-4698-ac9d-448efce3c643"
+                href="/docs/ecommerce"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 font-medium transition-colors"
