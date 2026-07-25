@@ -4,7 +4,7 @@ import Header from "@/components/layout/Header";
 import { ecommerceApi, getErrorMessage } from "@/lib/api";
 import {
   ShoppingBag, Key, Plus, Trash2, Copy, Check,
-  Clock, PackageCheck, Sparkles, RefreshCw, Eye, EyeOff,
+  Clock, PackageCheck, Sparkles, RefreshCw, Eye, EyeOff, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -347,9 +347,20 @@ export default function StorePage() {
         {/* Integration guide */}
         {tab === "keys" && (
           <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 space-y-3">
-            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <Key className="w-4 h-4 text-violet-400" /> How to connect your store
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Key className="w-4 h-4 text-violet-400" /> How to connect your store
+              </h3>
+              <a
+                href="https://claude.ai/code/artifact/8bb8bf3f-6667-4698-ac9d-448efce3c643"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 font-medium transition-colors"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                Full API Docs
+              </a>
+            </div>
             <p className="text-xs text-slate-400 leading-relaxed">
               Generate an API key above, then add it to your store's environment variables as{" "}
               <code className="bg-slate-800 px-1.5 py-0.5 rounded text-violet-300">SOCIALOS_API_KEY</code>.
