@@ -78,22 +78,3 @@ class PostPlatformTarget(Base):
     post = relationship("Post", back_populates="platform_targets")
     account = relationship("SocialAccount", back_populates="posts")
 
-
-class AutomationRule(Base):
-    __tablename__ = "automation_rules"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    name = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    is_active = Column(Boolean, default=True)
-
-    trigger_type = Column(String, nullable=False)   # post_likes|follower_drop|schedule|comment_keyword
-    trigger_config = Column(JSON, default=dict)
-    condition_config = Column(JSON, default=dict)
-    action_type = Column(String, nullable=False)    # repost|send_email|generate_post|notify
-    action_config = Column(JSON, default=dict)
-
-    run_count = Column(Integer, default=0)
-    last_run_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
