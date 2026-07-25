@@ -208,7 +208,6 @@ export default function LandingPage() {
                 Sign in to dashboard
               </Link>
             </div>
-            <p className="text-xs text-slate-600">Open source. MIT license. Self-hostable.</p>
           </div>
 
           {/* Right: product mock */}
@@ -502,7 +501,6 @@ export default function LandingPage() {
                 Create your free account
                 <ArrowRight className="w-4 h-4" />
               </Link>
-              <p className="text-xs text-slate-600 mt-5">No credit card. MIT license. Self-hostable.</p>
             </div>
           </div>
         </div>
@@ -513,7 +511,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-slate-500 text-sm">
             <img src="/icon.svg" alt="SocialOS" className="w-5 h-5 rounded" />
-            SocialOS, MIT License
+            SocialOS
           </div>
           <div className="flex items-center gap-6 text-sm text-slate-500">
             <Link href="/docs/ecommerce" className="hover:text-slate-300 transition-colors">API Docs</Link>
