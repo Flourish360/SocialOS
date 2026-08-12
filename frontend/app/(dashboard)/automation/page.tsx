@@ -18,9 +18,9 @@ const TRIGGER_OPTIONS = [
 
 const ACTION_OPTIONS = [
   { value: "auto_reply", label: "Send auto-reply", icon: MessageSquare },
-  { value: "repost", label: "Repost to another platform", icon: RefreshCw },
+  { value: "repost", label: "Repost to another platform", icon: RefreshCw, disabled: true },
   { value: "notify", label: "Send notification", icon: Bell },
-  { value: "email", label: "Send email digest", icon: Mail },
+  { value: "email", label: "Send email digest", icon: Mail, disabled: true },
 ];
 
 const TRIGGER_ICONS: Record<string, any> = {
@@ -30,7 +30,7 @@ const ACTION_ICONS: Record<string, any> = {
   auto_reply: MessageSquare, repost: RefreshCw, notify: Bell, email: Mail,
 };
 
-const DEFAULT_RULE = { name: "", trigger_type: "post_likes", action_type: "notify", description: "" };
+const DEFAULT_RULE = { name: "", trigger_type: "post_likes", action_type: "notify", description: "", config: {} as Record<string, string> };
 
 export default function AutomationPage() {
   const [rules, setRules] = useState<any[]>([]);
@@ -48,7 +48,24 @@ export default function AutomationPage() {
     if (!form.name.trim()) { toast.error("Rule name is required"); return; }
     setSaving(true);
     try {
-      const created = await automationApi.createRule({ ...form, is_active: true, run_count: 0, last_run: null });
+      // Coerce numeric config fields; keyword/reply_message stay as strings.
+      const config: Record<string, string | number> = {};
+      for (const [key, value] of Object.entries(form.config)) {
+        if (!value) continue;
+        config[key] = ["threshold", "threshold_pct", "interval_hours", "window_days"].includes(key)
+          ? Number(value)
+          : value;
+      }
+      const created = await automationApi.createRule({
+        name: form.name,
+        trigger_type: form.trigger_type,
+        action_type: form.action_type,
+        description: form.description,
+        config,
+        is_active: true,
+        run_count: 0,
+        last_run: null,
+      });
       setRules((prev) => [...prev, created]);
       setShowNew(false);
       setForm(DEFAULT_RULE);
@@ -69,9 +86,16 @@ export default function AutomationPage() {
     }
   };
 
-  const deleteRule = (id: string) => {
-    setRules((prev) => prev.filter((r) => r.id !== id));
-    toast.success("Rule deleted");
+  const deleteRule = async (id: string) => {
+    const prev = rules;
+    setRules((r) => r.filter((x) => x.id !== id));
+    try {
+      await automationApi.deleteRule(id);
+      toast.success("Rule deleted");
+    } catch {
+      setRules(prev);
+      toast.error("Failed to delete rule");
+    }
   };
 
   const triggerInfo = TRIGGER_OPTIONS.find((t) => t.value === form.trigger_type);
@@ -166,21 +190,97 @@ export default function AutomationPage() {
                     {ACTION_OPTIONS.map((opt) => (
                       <button
                         key={opt.value}
-                        onClick={() => setForm((f) => ({ ...f, action_type: opt.value }))}
+                        disabled={opt.disabled}
+                        onClick={() => !opt.disabled && setForm((f) => ({ ...f, action_type: opt.value }))}
                         className={cn(
                           "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all",
-                          form.action_type === opt.value
+                          opt.disabled
+                            ? "border-slate-800 text-slate-600 cursor-not-allowed"
+                            : form.action_type === opt.value
                             ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
                             : "border-slate-700 text-slate-400 hover:border-slate-600",
                         )}
                       >
                         <opt.icon className="w-3.5 h-3.5 shrink-0" />
-                        <span className="text-xs">{opt.label}</span>
+                        <span className="text-xs flex-1">{opt.label}</span>
+                        {opt.disabled && (
+                          <span className="text-[9px] uppercase tracking-wide bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded-full shrink-0">
+                            Coming soon
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
+
+              {/* Trigger/action config fields, shown conditionally */}
+              {(triggerInfo?.value === "post_likes" || triggerInfo?.value === "follower_drop" || triggerInfo?.value === "comment_keyword" || triggerInfo?.value === "schedule" || actionInfo?.value === "auto_reply") && (
+                <div className="grid grid-cols-2 gap-4">
+                  {form.trigger_type === "post_likes" && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5">Like threshold</label>
+                      <input
+                        type="number"
+                        min={1}
+                        className="input w-full"
+                        placeholder="e.g. 500"
+                        value={form.config.threshold ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, config: { ...f.config, threshold: e.target.value } }))}
+                      />
+                    </div>
+                  )}
+                  {form.trigger_type === "follower_drop" && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5">Drop threshold (%)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        className="input w-full"
+                        placeholder="e.g. 5"
+                        value={form.config.threshold_pct ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, config: { ...f.config, threshold_pct: e.target.value } }))}
+                      />
+                    </div>
+                  )}
+                  {form.trigger_type === "comment_keyword" && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5">Keyword</label>
+                      <input
+                        className="input w-full"
+                        placeholder="e.g. price"
+                        value={form.config.keyword ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, config: { ...f.config, keyword: e.target.value } }))}
+                      />
+                    </div>
+                  )}
+                  {form.trigger_type === "schedule" && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5">Run every (hours)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        className="input w-full"
+                        placeholder="e.g. 24"
+                        value={form.config.interval_hours ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, config: { ...f.config, interval_hours: e.target.value } }))}
+                      />
+                    </div>
+                  )}
+                  {form.action_type === "auto_reply" && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5">Reply message</label>
+                      <input
+                        className="input w-full"
+                        placeholder="Thanks for reaching out!"
+                        value={form.config.reply_message ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, config: { ...f.config, reply_message: e.target.value } }))}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs text-slate-400 mb-1.5">Notes (optional)</label>

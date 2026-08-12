@@ -116,4 +116,9 @@ export const ecommerceApi = {
   feed: () => api.get("/ecommerce/feed").then((r) => r.data),
 };
 
+export const notificationsApi = {
+  list: () => api.get("/notifications").then((r) => r.data),
+  markRead: (id: string) => api.post(`/notifications/${id}/read`).then((r) => r.data),
+};
+
 export default api;

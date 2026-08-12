@@ -48,6 +48,7 @@ def create_rule(
         trigger_type=body.get("trigger_type", "post_likes"),
         action_type=body.get("action_type", "notify"),
         description=body.get("description"),
+        config=body.get("config") or {},
         is_active=body.get("is_active", True),
     )
     db.add(rule)
@@ -123,26 +124,38 @@ def reply_to_message(
 ):
     text = (body.get("text") or "").strip()
     if text:
-        account = db.query(SocialAccount).filter(
-            SocialAccount.user_id == current_user.id,
-            SocialAccount.platform == "instagram",
-            SocialAccount.is_connected == True,
-        ).first()
-        if account and account.access_token:
-            import httpx as _httpx
-            import logging as _logging
-            _log = _logging.getLogger(__name__)
-            try:
-                with _httpx.Client(timeout=15) as client:
-                    resp = client.post(
-                        f"https://graph.instagram.com/v21.0/{message_id}/replies",
-                        params={"message": text, "access_token": account.access_token},
-                    )
-                if resp.status_code not in (200, 201):
-                    _log.warning("Instagram reply HTTP %s: %s", resp.status_code, resp.text[:200])
-            except Exception as e:
-                _log.warning("Instagram reply request failed: %s", e)
+        send_instagram_reply(db, current_user.id, message_id, text)
     return {"status": "sent", "message_id": message_id, "reply": text}
+
+
+def send_instagram_reply(db: Session, user_id: str, message_id: str, text: str) -> bool:
+    """Post a reply to an Instagram comment via Graph API. Shared by the manual
+    inbox-reply route and the automation rule execution engine (scheduler.py)."""
+    import httpx as _httpx
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    account = db.query(SocialAccount).filter(
+        SocialAccount.user_id == user_id,
+        SocialAccount.platform == "instagram",
+        SocialAccount.is_connected == True,
+    ).first()
+    if not account or not account.access_token:
+        return False
+
+    try:
+        with _httpx.Client(timeout=15) as client:
+            resp = client.post(
+                f"https://graph.instagram.com/v21.0/{message_id}/replies",
+                params={"message": text, "access_token": account.access_token},
+            )
+        if resp.status_code not in (200, 201):
+            _log.warning("Instagram reply HTTP %s: %s", resp.status_code, resp.text[:200])
+            return False
+        return True
+    except Exception as e:
+        _log.warning("Instagram reply request failed: %s", e)
+        return False
 
 
 # ── Competitors ────────────────────────────────────────────────────────────────
@@ -214,6 +227,7 @@ def _rule_dict(rule: AutomationRule) -> dict:
         "trigger_type": rule.trigger_type,
         "action_type": rule.action_type,
         "description": rule.description,
+        "config": rule.config or {},
         "is_active": rule.is_active,
         "run_count": rule.run_count,
         "last_run": rule.last_run.isoformat() if rule.last_run else None,

@@ -252,9 +252,177 @@ def _capture_audience_snapshots():
         db.close()
 
 
+def _log_and_bump(db, rule, external_ref: str) -> bool:
+    """Record an AutomationLog row for this (rule, external_ref) pair and bump
+    the rule's run_count/last_run. Returns False (no-op) if this event was
+    already handled. APScheduler runs this job with max_instances=1, so a
+    plain existence check is safe here — no rollback() mid-loop, which would
+    otherwise wipe out every other uncommitted change from earlier rules in
+    the same evaluation pass. The DB unique constraint on AutomationLog stays
+    as a last-resort guard, not the primary mechanism."""
+    from .models.automation_log import AutomationLog
+
+    exists = db.query(AutomationLog).filter(
+        AutomationLog.rule_id == rule.id,
+        AutomationLog.external_ref == external_ref,
+    ).first()
+    if exists:
+        return False
+    db.add(AutomationLog(rule_id=rule.id, external_ref=external_ref))
+    rule.run_count = (rule.run_count or 0) + 1
+    rule.last_run = datetime.now(timezone.utc)
+    return True
+
+
+def _dispatch_notify(db, user_id: str, rule, title: str, body: str):
+    from .models.notification import Notification
+    db.add(Notification(
+        user_id=user_id,
+        title=title,
+        body=body,
+        icon_key=rule.trigger_type,
+        rule_id=rule.id,
+    ))
+
+
+def _evaluate_automation_rules():
+    """Every 5 minutes: evaluate every active AutomationRule and fire its
+    action (notify / auto_reply) when the trigger condition is met. Each
+    fired event is deduped via AutomationLog so re-polling never repeats it."""
+    from .db.database import SessionLocal
+    from .models.automation_rule import AutomationRule
+    from .models.social_account import SocialAccount
+    from .models.post import Post
+    from .models.follower_snapshot import FollowerSnapshot
+    from .services.instagram_sync import fetch_instagram_comments
+    from .services.publishers import fetch_instagram_insights
+    from .api.automation import send_instagram_reply
+
+    db = SessionLocal()
+    try:
+        rules = db.query(AutomationRule).filter(AutomationRule.is_active == True).all()
+        fired = 0
+
+        for rule in rules:
+            config = rule.config or {}
+
+            if rule.trigger_type == "comment_keyword":
+                keyword = (config.get("keyword") or "").strip().lower()
+                if not keyword:
+                    continue
+                account = db.query(SocialAccount).filter(
+                    SocialAccount.user_id == rule.user_id,
+                    SocialAccount.platform == "instagram",
+                    SocialAccount.is_connected == True,
+                ).first()
+                if not account or not account.access_token:
+                    continue
+                posts = db.query(Post).filter(
+                    Post.user_id == rule.user_id,
+                    Post.status == "published",
+                    Post.platform_post_ids.isnot(None),
+                ).order_by(Post.published_at.desc()).limit(10).all()
+
+                for post in posts:
+                    ig_media_id = (post.platform_post_ids or {}).get("instagram")
+                    if not ig_media_id:
+                        continue
+                    for c in fetch_instagram_comments(account.access_token, ig_media_id, limit=20):
+                        comment_id = c.get("id")
+                        text = (c.get("text") or "")
+                        if not comment_id or keyword not in text.lower():
+                            continue
+                        if not _log_and_bump(db, rule, external_ref=comment_id):
+                            continue
+                        if rule.action_type == "auto_reply":
+                            reply = (config.get("reply_message") or "Thanks for your comment!").strip()
+                            send_instagram_reply(db, rule.user_id, comment_id, reply)
+                        elif rule.action_type == "notify":
+                            _dispatch_notify(db, rule.user_id, rule, rule.name, f'New comment matched "{keyword}": {text[:140]}')
+                        fired += 1
+
+            elif rule.trigger_type == "follower_drop":
+                threshold_pct = config.get("threshold_pct")
+                window_days = config.get("window_days", 7)
+                platform = config.get("platform", "instagram")
+                if not threshold_pct:
+                    continue
+                latest = db.query(FollowerSnapshot).filter(
+                    FollowerSnapshot.user_id == rule.user_id,
+                    FollowerSnapshot.platform == platform,
+                ).order_by(FollowerSnapshot.captured_at.desc()).first()
+                cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+                baseline = db.query(FollowerSnapshot).filter(
+                    FollowerSnapshot.user_id == rule.user_id,
+                    FollowerSnapshot.platform == platform,
+                    FollowerSnapshot.captured_at <= cutoff,
+                ).order_by(FollowerSnapshot.captured_at.desc()).first()
+                if not latest or not baseline or baseline.follower_count <= 0:
+                    continue
+                drop_pct = (baseline.follower_count - latest.follower_count) / baseline.follower_count * 100
+                if drop_pct < threshold_pct:
+                    continue
+                # One notification per day per drop episode, not once per 5-min tick.
+                day_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                if not _log_and_bump(db, rule, external_ref=f"drop-{day_key}"):
+                    continue
+                _dispatch_notify(db, rule.user_id, rule, rule.name, f"Followers dropped {drop_pct:.1f}% over the last {window_days} days.")
+                fired += 1
+
+            elif rule.trigger_type == "schedule":
+                interval_hours = config.get("interval_hours", 24)
+                anchor = rule.last_run or rule.created_at
+                if anchor and datetime.now(timezone.utc) < anchor.replace(tzinfo=timezone.utc) + timedelta(hours=interval_hours):
+                    continue
+                run_key = datetime.now(timezone.utc).isoformat()
+                if not _log_and_bump(db, rule, external_ref=f"schedule-{run_key}"):
+                    continue
+                _dispatch_notify(db, rule.user_id, rule, rule.name, rule.description or "Scheduled automation ran.")
+                fired += 1
+
+            elif rule.trigger_type == "post_likes":
+                threshold = config.get("threshold")
+                if not threshold:
+                    continue
+                account = db.query(SocialAccount).filter(
+                    SocialAccount.user_id == rule.user_id,
+                    SocialAccount.platform == "instagram",
+                    SocialAccount.is_connected == True,
+                ).first()
+                if not account or not account.access_token:
+                    continue
+                posts = db.query(Post).filter(
+                    Post.user_id == rule.user_id,
+                    Post.status == "published",
+                    Post.platform_post_ids.isnot(None),
+                ).order_by(Post.published_at.desc()).limit(10).all()
+
+                for post in posts:
+                    ig_media_id = (post.platform_post_ids or {}).get("instagram")
+                    if not ig_media_id:
+                        continue
+                    insights = fetch_instagram_insights(account.access_token, ig_media_id, post.media_type or "image")
+                    if (insights.get("likes") or 0) < threshold:
+                        continue
+                    if not _log_and_bump(db, rule, external_ref=post.id):
+                        continue
+                    _dispatch_notify(db, rule.user_id, rule, rule.name, f'"{post.caption[:60]}" reached {insights.get("likes")} likes.')
+                    fired += 1
+
+        db.commit()
+        if fired:
+            logger.info("Automation engine fired %d action(s)", fired)
+    except Exception:
+        logger.exception("Scheduler error during automation rule evaluation")
+        db.rollback()
+    finally:
+        db.close()
+
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(_publish_due_posts, "interval", minutes=1, id="publish_scheduled_posts")
 scheduler.add_job(_sync_all_instagram_accounts, "interval", hours=1, id="sync_instagram_accounts")
 scheduler.add_job(_capture_follower_snapshots, "interval", hours=24, id="capture_follower_snapshots")
 scheduler.add_job(_capture_audience_snapshots, "interval", hours=24, id="capture_audience_snapshots")
 scheduler.add_job(_refresh_instagram_tokens, "interval", hours=24 * 7, id="refresh_instagram_tokens")
+scheduler.add_job(_evaluate_automation_rules, "interval", minutes=5, id="evaluate_automation_rules")

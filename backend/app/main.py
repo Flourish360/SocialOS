@@ -10,9 +10,9 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from .core.config import settings
 from .api import auth, accounts, posts, analytics, ai, automation
-from .api import media, oauth, ecommerce
+from .api import media, oauth, ecommerce, notifications
 from .db.database import engine, Base
-from .models import user, social_account, post, audience_snapshot, follower_snapshot, automation_rule, competitor, api_key
+from .models import user, social_account, post, audience_snapshot, follower_snapshot, automation_rule, competitor, api_key, automation_log, notification
 from .scheduler import scheduler
 
 try:
@@ -23,6 +23,24 @@ try:
             conn.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS platform_post_ids JSONB DEFAULT '{}'::jsonb"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS lockout_until TIMESTAMPTZ"))
+            conn.execute(text("ALTER TABLE automation_rules ADD COLUMN IF NOT EXISTS config JSONB DEFAULT '{}'::jsonb"))
+            # One-time fix for a legacy schema: production's automation_rules table predates
+            # the current AutomationRule model and still has last_run_at (not last_run) plus
+            # three unused columns from an earlier rule design. Guarded so it's a no-op once
+            # the rename has already happened.
+            conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='automation_rules' AND column_name='last_run_at')
+                       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='automation_rules' AND column_name='last_run')
+                    THEN
+                        ALTER TABLE automation_rules RENAME COLUMN last_run_at TO last_run;
+                    END IF;
+                END $$;
+            """))
+            conn.execute(text("ALTER TABLE automation_rules DROP COLUMN IF EXISTS trigger_config"))
+            conn.execute(text("ALTER TABLE automation_rules DROP COLUMN IF EXISTS condition_config"))
+            conn.execute(text("ALTER TABLE automation_rules DROP COLUMN IF EXISTS action_config"))
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS api_keys (
                     id TEXT PRIMARY KEY,
@@ -36,6 +54,13 @@ try:
                 )
             """))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_api_keys_key_hash ON api_keys(key_hash)"))
+    elif engine.dialect.name == "sqlite":
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            try:
+                conn.execute(text("ALTER TABLE automation_rules ADD COLUMN config JSON DEFAULT '{}'"))
+            except Exception:
+                pass  # column already exists on this local DB file
 except Exception as e:
     import logging
     logging.getLogger(__name__).error("DB table creation failed: %s", e)
@@ -113,6 +138,7 @@ app.include_router(automation.router, prefix="/api")
 app.include_router(media.router, prefix="/api")
 app.include_router(oauth.router, prefix="/api")
 app.include_router(ecommerce.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 
 
 # ── Public routes ─────────────────────────────────────────────────────────────
