@@ -14,6 +14,7 @@ from ..models.post import Post, PostPlatformTarget
 from ..models.api_key import ApiKey
 from ..api.deps import get_current_user
 from ..core.config import settings
+from ..services.publishers import publish_to_platform
 from .ecommerce_templates import pick_template, get_platform_prompt
 
 router = APIRouter(prefix="/ecommerce", tags=["ecommerce"])
@@ -149,16 +150,33 @@ def _create_posts(
 
     for account in accounts:
         caption = captions.get(account.platform) or captions.get("instagram", "")
+
+        # "post_now" means publish for real, right now — never fabricate a
+        # "published" status without actually calling the platform's API.
+        publish_result = (
+            publish_to_platform(db, user.id, account.platform, caption, media_urls, "image" if media_urls else "none")
+            if is_live else None
+        )
+        succeeded = bool(publish_result and publish_result.get("success"))
+        platform_post_id = publish_result.get("post_id") if publish_result else None
+        error_message = publish_result.get("error") if publish_result and not succeeded else None
+
         post = Post(
             user_id=user.id,
             caption=caption,
             media_urls=media_urls,
             media_type="image" if media_urls else "none",
-            status="published" if is_live else "scheduled",
-            published_at=now if is_live else None,
+            status=("published" if succeeded else "failed") if is_live else "scheduled",
+            published_at=now if succeeded else None,
             scheduled_at=None if is_live else now,
-            platform_account_ids=[account.id],
-            platform_post_ids={"_order_id": order_id} if order_id else {},
+            # One Post row per platform here, so this is always a single-item
+            # list — kept as a list of platform NAMES (not account IDs) so the
+            # scheduler's _publish_due_posts can match SocialAccount.platform.
+            platform_account_ids=[account.platform],
+            platform_post_ids=(
+                {**({"_order_id": order_id} if order_id else {}), account.platform: platform_post_id}
+                if platform_post_id else ({"_order_id": order_id} if order_id else {})
+            ),
             ai_generated=True,
             content_type_tag=event_tag,
         )
@@ -169,8 +187,10 @@ def _create_posts(
             post_id=post.id,
             account_id=account.id,
             platform=account.platform,
-            status="published" if is_live else "pending",
-            published_at=now if is_live else None,
+            status=("published" if succeeded else "failed") if is_live else "pending",
+            platform_post_id=platform_post_id,
+            published_at=now if succeeded else None,
+            error_message=error_message,
         )
         db.add(target)
 

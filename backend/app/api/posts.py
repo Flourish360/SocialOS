@@ -353,7 +353,7 @@ def create_post(
                 )}
             if platform == "tiktok":
                 if not ensure_tiktok_token(account, db):
-                    return {"platform": "tiktok", "success": False, "error": "TikTok token expired — reconnect TikTok in Settings"}
+                    return {"platform": "tiktok", "success": False, "error": "TikTok token expired, reconnect TikTok in Settings"}
                 return {"platform": platform, **publish_to_tiktok(
                     access_token=account.access_token,
                     caption=full_caption,
@@ -447,7 +447,7 @@ def retry_post(
             )}
         if platform == "tiktok":
             if not ensure_tiktok_token(account, db):
-                return {"platform": "tiktok", "success": False, "error": "TikTok token expired — reconnect TikTok in Settings"}
+                return {"platform": "tiktok", "success": False, "error": "TikTok token expired, reconnect TikTok in Settings"}
             return {"platform": platform, **publish_to_tiktok(
                 access_token=account.access_token,
                 caption=full_caption,

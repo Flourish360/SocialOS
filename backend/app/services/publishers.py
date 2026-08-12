@@ -488,3 +488,58 @@ def fetch_instagram_insights(access_token: str, media_id: str, media_type: str =
     except Exception as e:
         log.warning("Instagram insights fetch failed: %s", e)
         return {"impressions": 0, "reach": 0, "likes": 0, "comments": 0, "saves": 0, "shares": 0, "total_interactions": 0}
+
+
+def publish_to_platform(db, user_id: str, platform: str, caption: str, media_urls: list[str], media_type: str = "image") -> dict:
+    """Look up the user's connected account for `platform` and publish to it.
+    Shared dispatch used by both the manual Compose flow and the ecommerce
+    product/sale endpoints so "publish now" always means a real platform call,
+    never a fabricated success. Returns {"platform", "success", "post_id"?, "error"?}."""
+    from ..models.social_account import SocialAccount
+    from .token_refresh import ensure_tiktok_token
+
+    account = db.query(SocialAccount).filter(
+        SocialAccount.user_id == user_id,
+        SocialAccount.platform == platform,
+        SocialAccount.is_connected == True,
+    ).first()
+    if not account or not account.access_token:
+        return {"platform": platform, "success": False, "error": "Not connected"}
+
+    if platform == "instagram":
+        return {"platform": platform, **publish_to_instagram(
+            access_token=account.access_token,
+            ig_user_id=account.platform_user_id,
+            caption=caption,
+            media_urls=media_urls,
+            media_type=media_type,
+        )}
+    if platform == "twitter":
+        return {"platform": platform, **publish_to_twitter(
+            access_token=account.access_token,
+            caption=caption,
+            media_urls=media_urls,
+        )}
+    if platform == "tiktok":
+        if not ensure_tiktok_token(account, db):
+            return {"platform": "tiktok", "success": False, "error": "TikTok token expired, reconnect TikTok in Settings"}
+        return {"platform": platform, **publish_to_tiktok(
+            access_token=account.access_token,
+            caption=caption,
+            media_urls=media_urls,
+        )}
+    if platform == "linkedin":
+        return {"platform": platform, **publish_to_linkedin(
+            access_token=account.access_token,
+            platform_user_id=account.platform_user_id,
+            caption=caption,
+            media_urls=media_urls,
+        )}
+    if platform == "facebook":
+        return {"platform": platform, **publish_to_facebook(
+            access_token=account.access_token,
+            page_id=account.platform_user_id,
+            caption=caption,
+            media_urls=media_urls,
+        )}
+    return {"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"}
