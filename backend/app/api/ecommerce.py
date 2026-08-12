@@ -361,6 +361,7 @@ def store_feed(current_user: User = Depends(get_current_user), db: Session = Dep
             "status": p.status,
             "event": p.content_type_tag,
             "platforms": [t.platform for t in p.platform_targets],
+            "error_message": next((t.error_message for t in p.platform_targets if t.error_message), None),
             "created_at": p.created_at.isoformat() if p.created_at else None,
         }
         for p in posts

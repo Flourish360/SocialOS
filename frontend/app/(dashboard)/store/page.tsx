@@ -24,6 +24,7 @@ interface FeedPost {
   status: string;
   event: string;
   platforms: string[];
+  error_message: string | null;
   created_at: string | null;
 }
 
@@ -306,6 +307,10 @@ function FeedPanel() {
                       </span>
                     ))}
                   </div>
+
+                  {post.status === "failed" && post.error_message && (
+                    <p className="text-xs text-red-400/80 leading-relaxed">{post.error_message}</p>
+                  )}
 
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-slate-600 flex items-center gap-1">
