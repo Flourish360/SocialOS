@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Header from "@/components/layout/Header";
-import { ecommerceApi, getErrorMessage } from "@/lib/api";
+import { ecommerceApi, postsApi, getErrorMessage } from "@/lib/api";
 import {
   ShoppingBag, Key, Plus, Trash2, Copy, Check,
-  Clock, PackageCheck, Sparkles, RefreshCw, Eye, EyeOff, BookOpen,
+  Clock, PackageCheck, Sparkles, RefreshCw, Eye, EyeOff, BookOpen, RotateCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -201,6 +201,7 @@ function FeedPanel() {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "product_listed" | "product_sold">("all");
+  const [retrying, setRetrying] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -215,6 +216,19 @@ function FeedPanel() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const retry = async (postId: string) => {
+    setRetrying(postId);
+    try {
+      await postsApi.retry(postId);
+      await load();
+      toast.success("Retried, check status below");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Retry failed"));
+    } finally {
+      setRetrying(null);
+    }
+  };
 
   const visible = filter === "all" ? posts : posts.filter((p) => p.event === filter);
 
@@ -272,6 +286,8 @@ function FeedPanel() {
                     "absolute top-2 right-2 text-xs px-2 py-0.5 rounded-full border font-medium",
                     post.status === "published"
                       ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                      : post.status === "failed"
+                      ? "bg-red-500/20 text-red-300 border-red-500/30"
                       : "bg-amber-500/20 text-amber-300 border-amber-500/30",
                   )}>
                     {post.status}
@@ -291,10 +307,22 @@ function FeedPanel() {
                     ))}
                   </div>
 
-                  <p className="text-xs text-slate-600 flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> {timeAgo(post.created_at)}
-                    {post.event === "product_listed" && <span className="flex items-center gap-1 ml-2 text-violet-400"><Sparkles className="w-3 h-3" /> AI generated</span>}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-600 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> {timeAgo(post.created_at)}
+                      {post.event === "product_listed" && <span className="flex items-center gap-1 ml-2 text-violet-400"><Sparkles className="w-3 h-3" /> AI generated</span>}
+                    </p>
+                    {post.status === "failed" && (
+                      <button
+                        onClick={() => retry(post.id)}
+                        disabled={retrying === post.id}
+                        className="flex items-center gap-1 text-xs text-red-300 hover:text-red-200 disabled:opacity-50 transition-colors shrink-0"
+                      >
+                        <RotateCw className={cn("w-3 h-3", retrying === post.id && "animate-spin")} />
+                        Retry
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );

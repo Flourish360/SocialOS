@@ -54,6 +54,23 @@ try:
                 )
             """))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_api_keys_key_hash ON api_keys(key_hash)"))
+            # One-time data repair: ecommerce-created posts used to store
+            # platform_account_ids as SocialAccount UUIDs instead of platform
+            # name strings, which broke the scheduler's account lookup and
+            # made them un-retryable. post_platform_targets.platform was
+            # always correct, so recompute from there. Idempotent — safe to
+            # run on every boot, only touches ecommerce-tagged posts.
+            conn.execute(text("""
+                UPDATE posts p
+                SET platform_account_ids = sub.platforms
+                FROM (
+                    SELECT post_id, jsonb_agg(DISTINCT platform) AS platforms
+                    FROM post_platform_targets
+                    GROUP BY post_id
+                ) sub
+                WHERE p.id = sub.post_id
+                AND p.content_type_tag IN ('product_listed', 'product_sold')
+            """))
     elif engine.dialect.name == "sqlite":
         from sqlalchemy import text
         with engine.begin() as conn:
@@ -61,6 +78,22 @@ try:
                 conn.execute(text("ALTER TABLE automation_rules ADD COLUMN config JSON DEFAULT '{}'"))
             except Exception:
                 pass  # column already exists on this local DB file
+        # Same ecommerce platform_account_ids repair as the Postgres branch above,
+        # done in Python since SQLite's JSON aggregation is less portable across versions.
+        try:
+            from .db.database import SessionLocal as _SessionLocal
+            with _SessionLocal() as repair_db:
+                from .models.post import Post
+                broken = repair_db.query(Post).filter(
+                    Post.content_type_tag.in_(["product_listed", "product_sold"]),
+                ).all()
+                for p in broken:
+                    correct = sorted({t.platform for t in p.platform_targets})
+                    if correct and p.platform_account_ids != correct:
+                        p.platform_account_ids = correct
+                repair_db.commit()
+        except Exception:
+            pass
 except Exception as e:
     import logging
     logging.getLogger(__name__).error("DB table creation failed: %s", e)
