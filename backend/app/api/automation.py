@@ -86,6 +86,9 @@ def delete_rule(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if settings.USE_MOCK_DATA:
+        MOCK_AUTOMATIONS[:] = [r for r in MOCK_AUTOMATIONS if r["id"] != rule_id]
+        return
     rule = db.query(AutomationRule).filter(
         AutomationRule.id == rule_id,
         AutomationRule.user_id == current_user.id,
