@@ -6,6 +6,12 @@ const BACKEND = (process.env.BACKEND_URL ?? "http://127.0.0.1:8000").replace(/\/
 // Raise Vercel's default timeout for AI caption generation requests.
 export const maxDuration = 30;
 
+// This proxy forwards user-scoped, authenticated requests (API keys, feed, account
+// data). It must never be cached, or two different users can be served each other's
+// responses. Next's fetch() defaults GET requests to force-cache otherwise.
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 async function handler(req: NextRequest): Promise<NextResponse> {
   const pathname = req.nextUrl.pathname; // e.g. /api/ecommerce/feed
   const search   = req.nextUrl.search;   // e.g. ?status=published
@@ -25,6 +31,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       method: req.method,
       headers,
       body: req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined,
+      cache: "no-store",
       // @ts-expect-error duplex is required by the Fetch spec for streaming bodies
       duplex: "half",
     });
