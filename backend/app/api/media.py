@@ -1,40 +1,82 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from ..api.deps import get_current_user
 from ..db.database import get_db
 from ..models.user import User
 from ..models.media import Media
 from ..core.config import settings
+from ..services.url_safety import resolve_and_validate, UnsafeUrlError
 import uuid, httpx, urllib.parse
 
 router = APIRouter(prefix="/media", tags=["media"])
+limiter = Limiter(key_func=get_remote_address)
+
+_ALLOWED_MEDIA_TYPES = {
+    "image/jpeg", "image/png", "image/webp", "image/gif",
+    "video/mp4", "video/quicktime",
+}
+_MAX_PROXY_BYTES = 100 * 1024 * 1024  # 100MB
 
 
 @router.get("/proxy")
-def proxy_media(url: str):
-    """Re-serve a Cloudinary file under our own domain (unauthenticated — TikTok's
-    PULL_FROM_URL fetches this without credentials, and TikTok only trusts URLs
-    on a domain we've verified ownership of)."""
-    if not url.startswith("https://res.cloudinary.com/"):
-        raise HTTPException(400, "Only Cloudinary URLs are allowed")
+@limiter.limit("20/minute")
+def proxy_media(request: Request, url: str):
+    """Re-serve an external image/video under our own (TikTok-verified) domain.
 
+    Unauthenticated, TikTok's PULL_FROM_URL fetches this directly without
+    credentials, and TikTok only trusts URLs on a domain we've verified
+    ownership of. Since this now accepts arbitrary caller-supplied URLs (not
+    just our own Cloudinary bucket), it's SSRF-guarded via url_safety and kept
+    to no-redirect, image/video-only, size-capped fetches. See
+    backend/app/services/url_safety.py for the threat model and tradeoffs.
+    """
     try:
-        head = httpx.head(url, follow_redirects=True, timeout=30)
-        head.raise_for_status()
+        resolve_and_validate(url)
+    except UnsafeUrlError as e:
+        raise HTTPException(400, str(e))
+
+    # Validate off the GET response's own headers rather than a separate HEAD
+    # request: many third-party store CDNs don't support HEAD reliably (405/501),
+    # which would otherwise reject a perfectly safe, fetchable URL. The stream is
+    # opened here (request sent, headers received) but the body isn't consumed
+    # until the StreamingResponse below iterates it.
+    client = httpx.Client(timeout=60)
+    stream_ctx = client.stream("GET", url, follow_redirects=False)
+    try:
+        resp = stream_ctx.__enter__()
+        resp.raise_for_status()
     except Exception as e:
+        stream_ctx.__exit__(None, None, None)
+        client.close()
         raise HTTPException(502, f"Failed to fetch media: {e}")
 
-    content_type = head.headers.get("content-type", "application/octet-stream")
+    content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+    content_length = resp.headers.get("content-length")
+    if content_type not in _ALLOWED_MEDIA_TYPES or (content_length and int(content_length) > _MAX_PROXY_BYTES):
+        stream_ctx.__exit__(None, None, None)
+        client.close()
+        if content_type not in _ALLOWED_MEDIA_TYPES:
+            raise HTTPException(400, f"Unsupported media type: {content_type or 'unknown'}")
+        raise HTTPException(400, "Media exceeds the 100MB size limit")
+
     headers = {}
-    if "content-length" in head.headers:
-        headers["Content-Length"] = head.headers["content-length"]
+    if content_length:
+        headers["Content-Length"] = content_length
 
     def _stream():
-        with httpx.stream("GET", url, follow_redirects=True, timeout=60) as resp:
-            resp.raise_for_status()
+        sent = 0
+        try:
             for chunk in resp.iter_bytes(chunk_size=65536):
+                sent += len(chunk)
+                if sent > _MAX_PROXY_BYTES:
+                    break  # misbehaving origin lied about/omitted Content-Length
                 yield chunk
+        finally:
+            stream_ctx.__exit__(None, None, None)
+            client.close()
 
     return StreamingResponse(_stream(), media_type=content_type, headers=headers)
 

@@ -3,6 +3,7 @@ import httpx
 import logging
 import time
 import urllib.parse
+from urllib.parse import urlsplit
 
 log = logging.getLogger(__name__)
 
@@ -223,10 +224,16 @@ def publish_to_twitter(
 
 def _tiktok_media_url(raw_url: str) -> str:
     # TikTok only trusts URLs on a domain we've verified ownership of, so route
-    # Cloudinary URLs through our own backend proxy.
+    # anything not already on our own backend (e.g. a third-party store's
+    # product photo CDN) through our proxy. Host comparison, not substring
+    # matching, so a URL like https://evil.com/?x=<our-domain> can't slip
+    # through unproxied. A URL already on our host is returned unchanged, which
+    # also prevents double-proxying or an infinite wrap loop, since a proxied
+    # URL's host is always our own.
+    backend_host = urlsplit(BACKEND_BASE).netloc
     return (
-        f"{BACKEND_BASE}/api/media/proxy?url={urllib.parse.quote(raw_url, safe='')}"
-        if "cloudinary.com" in raw_url else raw_url
+        raw_url if urlsplit(raw_url).netloc == backend_host
+        else f"{BACKEND_BASE}/api/media/proxy?url={urllib.parse.quote(raw_url, safe='')}"
     )
 
 
