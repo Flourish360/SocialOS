@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from ..api.deps import get_current_user
 from ..db.database import get_db
 from ..models.user import User
-from ..models.post import Post
+from ..models.post import Post, PostPlatformTarget
 from ..models.social_account import SocialAccount
 from ..schemas.post import PostCreate, PostUpdate
 from ..mock.data import MOCK_POSTS
@@ -483,9 +483,26 @@ def retry_post(
                 post.platform_post_ids = ids
 
     any_success = any(r["success"] for r in publish_results)
+    now = datetime.utcnow()
     post.status = "published" if any_success else "failed"
     if any_success:
-        post.published_at = datetime.utcnow()
+        post.published_at = now
+
+    # Persist the real per-platform result (not just the aggregate Post.status)
+    # so the actual error is visible next time, instead of a stale/empty one.
+    for result in publish_results:
+        target = db.query(PostPlatformTarget).filter(
+            PostPlatformTarget.post_id == post.id,
+            PostPlatformTarget.platform == result["platform"],
+        ).first()
+        if not target:
+            continue
+        succeeded = bool(result.get("success"))
+        target.status = "published" if succeeded else "failed"
+        target.platform_post_id = result.get("post_id") or target.platform_post_id
+        target.error_message = None if succeeded else result.get("error")
+        target.published_at = now if succeeded else target.published_at
+
     db.commit()
     db.refresh(post)
 
