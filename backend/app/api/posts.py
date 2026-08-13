@@ -358,6 +358,7 @@ def create_post(
                     access_token=account.access_token,
                     caption=full_caption,
                     media_urls=media_urls,
+                    media_type=effective_type,
                 )}
             if platform == "linkedin":
                 return {"platform": platform, **publish_to_linkedin(
@@ -452,6 +453,7 @@ def retry_post(
                 access_token=account.access_token,
                 caption=full_caption,
                 media_urls=post.media_urls or [],
+                media_type=post.media_type or "image",
             )}
         if platform == "linkedin":
             return {"platform": platform, **publish_to_linkedin(

@@ -74,6 +74,7 @@ def _publish_due_posts():
                         access_token=account.access_token,
                         caption=full_caption,
                         media_urls=post.media_urls or [],
+                        media_type=post.media_type or "image",
                     )
                 elif platform == "linkedin":
                     result = publish_to_linkedin(

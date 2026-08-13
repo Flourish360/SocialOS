@@ -148,20 +148,29 @@ def publish_to_instagram(
 
 
 def _upload_twitter_media(access_token: str, media_url: str) -> str | None:
-    """Download media from a URL and upload it to Twitter. Returns media_id_string or None."""
+    """Download media from a URL and upload it via X API v2. Returns media_id or None.
+
+    The old v1.1 media/upload.json endpoint was deprecated (retired after
+    March 2026, see https://docs.x.com/x-api/media/upload-media); this uses
+    the current POST /2/media/upload endpoint instead, which accepts the same
+    OAuth 2.0 Bearer token already used for posting tweets (media.write scope,
+    already requested at connect time)."""
     try:
         with httpx.Client(timeout=60) as client:
             dl = client.get(media_url)
             dl.raise_for_status()
             content_type = dl.headers.get("content-type", "image/jpeg")
+            media_category = "tweet_gif" if content_type == "image/gif" else "tweet_image"
             resp = client.post(
-                "https://upload.twitter.com/1.1/media/upload.json",
+                "https://api.x.com/2/media/upload",
                 headers={"Authorization": f"Bearer {access_token}"},
                 files={"media": ("media", dl.content, content_type)},
+                data={"media_category": media_category},
             )
             data = resp.json()
-            if "media_id_string" in data:
-                return data["media_id_string"]
+            media_id = data.get("data", {}).get("id")
+            if media_id:
+                return media_id
             log.warning("Twitter media upload error: %s", data)
     except Exception as e:
         log.warning("Twitter media upload failed for %s: %s", media_url, e)
@@ -212,30 +221,47 @@ def publish_to_twitter(
         return {"success": False, "error": str(e)}
 
 
-def publish_to_tiktok(
-    access_token: str,
-    caption: str,
-    media_urls: list[str] | None = None,
-) -> dict:
-    """Send a video to the user's TikTok inbox via Content Posting API (PULL_FROM_URL).
-
-    The video appears as a draft in the user's TikTok app — they tap Post to publish.
-    No audit approval required. Caption must be added by the user in the TikTok app.
-    Polls the status endpoint to confirm delivery before returning success.
-    Returns {"success": True, "post_id": "...", "tiktok_status": "INBOX"} or
-            {"success": False, "error": "..."}.
-    """
-    if not media_urls:
-        return {"success": False, "error": "TikTok requires a video URL"}
-
-    raw_url = media_urls[0]
+def _tiktok_media_url(raw_url: str) -> str:
     # TikTok only trusts URLs on a domain we've verified ownership of, so route
     # Cloudinary URLs through our own backend proxy.
-    video_url = (
+    return (
         f"{BACKEND_BASE}/api/media/proxy?url={urllib.parse.quote(raw_url, safe='')}"
         if "cloudinary.com" in raw_url else raw_url
     )
 
+
+def _poll_tiktok_status(publish_id: str, headers: dict) -> dict:
+    """Poll TikTok's publish status endpoint until the content reaches the
+    user's inbox (or fails), for up to ~2 minutes. Shared by video and photo
+    posting, since both go through the same publish_id/status system."""
+    for _ in range(40):
+        time.sleep(3)
+        with httpx.Client(timeout=15) as client:
+            status_resp = client.post(
+                "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
+                headers=headers,
+                json={"publish_id": publish_id},
+            )
+            status_data = status_resp.json()
+
+        status = status_data.get("data", {}).get("status", "")
+        log.info("TikTok publish_id=%s status=%s", publish_id, status)
+        if status in ("SEND_TO_USER_INBOX", "PUBLISH_COMPLETE"):
+            return {"success": True, "post_id": publish_id, "tiktok_status": status}
+        if status == "FAILED":
+            reason = status_data.get("data", {}).get("fail_reason", "Unknown")
+            return {"success": False, "error": f"TikTok processing failed: {reason}"}
+
+    return {"success": False, "error": "TikTok upload timed out after 2 minutes"}
+
+
+def _publish_video_to_tiktok(access_token: str, media_urls: list[str]) -> dict:
+    """Send a video to the user's TikTok inbox via Content Posting API (PULL_FROM_URL).
+
+    The video appears as a draft in the user's TikTok app, they tap Post to publish.
+    No audit approval required. Caption must be added by the user in the TikTok app.
+    """
+    video_url = _tiktok_media_url(media_urls[0])
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json; charset=UTF-8",
@@ -251,7 +277,7 @@ def publish_to_tiktok(
         pass
 
     if not video_size:
-        return {"success": False, "error": "Could not determine video file size — ensure the URL returns a Content-Length header"}
+        return {"success": False, "error": "Could not determine video file size, ensure the URL returns a Content-Length header"}
 
     try:
         with httpx.Client(timeout=60) as client:
@@ -278,30 +304,73 @@ def publish_to_tiktok(
         if not publish_id:
             return {"success": False, "error": f"No publish_id returned: {data}"}
 
-        # Poll until TikTok confirms the video reached the inbox (up to ~2 min).
-        # Inbox flow success status is SEND_TO_USER_INBOX; direct post uses PUBLISH_COMPLETE.
-        for _ in range(40):
-            time.sleep(3)
-            with httpx.Client(timeout=15) as client:
-                status_resp = client.post(
-                    "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
-                    headers=headers,
-                    json={"publish_id": publish_id},
-                )
-                status_data = status_resp.json()
-
-            status = status_data.get("data", {}).get("status", "")
-            log.info("TikTok publish_id=%s status=%s", publish_id, status)
-            if status in ("SEND_TO_USER_INBOX", "PUBLISH_COMPLETE"):
-                return {"success": True, "post_id": publish_id, "tiktok_status": status}
-            if status == "FAILED":
-                reason = status_data.get("data", {}).get("fail_reason", "Unknown")
-                return {"success": False, "error": f"TikTok processing failed: {reason}"}
-
-        return {"success": False, "error": "TikTok upload timed out after 2 minutes"}
+        return _poll_tiktok_status(publish_id, headers)
     except Exception as e:
-        log.warning("TikTok publish failed: %s", e)
+        log.warning("TikTok video publish failed: %s", e)
         return {"success": False, "error": str(e)}
+
+
+def _publish_photo_to_tiktok(access_token: str, media_urls: list[str]) -> dict:
+    """Send photo(s) to the user's TikTok inbox via the Content Posting API's
+    photo endpoint (PULL_FROM_URL, MEDIA_UPLOAD mode, uses the same
+    video.upload scope as the video flow, no app audit required)."""
+    photo_urls = [_tiktok_media_url(u) for u in media_urls[:35]]
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json; charset=UTF-8",
+    }
+
+    try:
+        with httpx.Client(timeout=60) as client:
+            resp = client.post(
+                "https://open.tiktokapis.com/v2/post/publish/content/init/",
+                json={
+                    "post_mode": "MEDIA_UPLOAD",
+                    "media_type": "PHOTO",
+                    "source_info": {
+                        "source": "PULL_FROM_URL",
+                        "photo_cover_index": 0,
+                        "photo_images": photo_urls,
+                    },
+                },
+                headers=headers,
+            )
+            data = resp.json()
+
+        err = data.get("error", {})
+        if err.get("code", "ok") != "ok":
+            return {"success": False, "error": err.get("message", str(data))}
+
+        publish_id = data.get("data", {}).get("publish_id")
+        if not publish_id:
+            return {"success": False, "error": f"No publish_id returned: {data}"}
+
+        return _poll_tiktok_status(publish_id, headers)
+    except Exception as e:
+        log.warning("TikTok photo publish failed: %s", e)
+        return {"success": False, "error": str(e)}
+
+
+def publish_to_tiktok(
+    access_token: str,
+    caption: str,
+    media_urls: list[str] | None = None,
+    media_type: str = "video",
+) -> dict:
+    """Send video or photo(s) to the user's TikTok inbox via the Content
+    Posting API (PULL_FROM_URL). Routes to the video or photo endpoint based
+    on media_type ("video" default for backward compatibility with existing
+    callers that don't pass it; "image"/"carousel"/"photo" go to the photo
+    endpoint). Caption must be added by the user in the TikTok app.
+    Returns {"success": True, "post_id": "...", "tiktok_status": "..."} or
+            {"success": False, "error": "..."}.
+    """
+    if not media_urls:
+        return {"success": False, "error": "TikTok requires at least one photo or video URL"}
+
+    if media_type in ("image", "carousel", "photo"):
+        return _publish_photo_to_tiktok(access_token, media_urls)
+    return _publish_video_to_tiktok(access_token, media_urls)
 
 
 def _upload_linkedin_image(access_token: str, owner_urn: str, image_url: str) -> str | None:
@@ -423,7 +492,7 @@ def publish_to_facebook(
     try:
         with httpx.Client(timeout=30) as client:
             if media_urls:
-                # Photo post — publishes the image and the caption together
+                # Photo post, publishes the image and the caption together
                 resp = client.post(
                     f"{FB_API}/{page_id}/photos",
                     params={
@@ -455,7 +524,7 @@ def publish_to_facebook(
 def fetch_instagram_insights(access_token: str, media_id: str, media_type: str = "image") -> dict:
     """Fetch real engagement metrics for a published Instagram post.
 
-    Returns a dict of {impressions, reach, likes, comments, saves, shares} — zeros if unavailable.
+    Returns a dict of {impressions, reach, likes, comments, saves, shares}, zeros if unavailable.
     """
     # Different metrics are available for different media types
     if media_type in ("video", "reel"):
@@ -527,6 +596,7 @@ def publish_to_platform(db, user_id: str, platform: str, caption: str, media_url
             access_token=account.access_token,
             caption=caption,
             media_urls=media_urls,
+            media_type=media_type,
         )}
     if platform == "linkedin":
         return {"platform": platform, **publish_to_linkedin(
