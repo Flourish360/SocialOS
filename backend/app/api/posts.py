@@ -9,7 +9,7 @@ from ..schemas.post import PostCreate, PostUpdate
 from ..mock.data import MOCK_POSTS
 from ..core.config import settings
 from ..services.publishers import publish_to_instagram, publish_to_twitter, publish_to_tiktok, publish_to_linkedin, publish_to_facebook, fetch_instagram_insights
-from ..services.token_refresh import ensure_tiktok_token
+from ..services.token_refresh import ensure_tiktok_token, ensure_twitter_token
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid, random
@@ -346,6 +346,8 @@ def create_post(
                     media_type=effective_type,
                 )}
             if platform == "twitter":
+                if not ensure_twitter_token(account, db):
+                    return {"platform": "twitter", "success": False, "error": "Twitter token expired, reconnect Twitter in Settings"}
                 return {"platform": platform, **publish_to_twitter(
                     access_token=account.access_token,
                     caption=full_caption,
@@ -441,6 +443,8 @@ def retry_post(
                 media_type=post.media_type or "image",
             )}
         if platform == "twitter":
+            if not ensure_twitter_token(account, db):
+                return {"platform": "twitter", "success": False, "error": "Twitter token expired, reconnect Twitter in Settings"}
             return {"platform": platform, **publish_to_twitter(
                 access_token=account.access_token,
                 caption=full_caption,

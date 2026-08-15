@@ -51,6 +51,10 @@ def _publish_due_posts():
                     else:
                         logger.warning("Scheduled post %s failed on Instagram: %s", post.id, result.get("error"))
                 elif platform == "twitter":
+                    from .services.token_refresh import ensure_twitter_token
+                    if not ensure_twitter_token(account, db):
+                        logger.warning("Scheduled post %s: Twitter token expired and refresh failed", post.id)
+                        continue
                     result = publish_to_twitter(
                         access_token=account.access_token,
                         caption=full_caption,
@@ -191,10 +195,13 @@ def _refresh_instagram_tokens():
         ).all()
         refreshed = 0
         for account in accounts:
-            needs_refresh = (
-                account.token_expires_at is None
-                or account.token_expires_at <= threshold
-            )
+            # SQLite round-trips DateTime(timezone=True) as naive even when
+            # stored tz-aware (Postgres preserves it correctly), so normalize
+            # before comparing against a tz-aware threshold.
+            expires_at = account.token_expires_at
+            if expires_at and not expires_at.tzinfo:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            needs_refresh = expires_at is None or expires_at <= threshold
             if not needs_refresh or not account.access_token:
                 continue
             result = refresh_instagram_token(account.access_token)

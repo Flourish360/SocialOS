@@ -572,7 +572,7 @@ def publish_to_platform(db, user_id: str, platform: str, caption: str, media_url
     product/sale endpoints so "publish now" always means a real platform call,
     never a fabricated success. Returns {"platform", "success", "post_id"?, "error"?}."""
     from ..models.social_account import SocialAccount
-    from .token_refresh import ensure_tiktok_token
+    from .token_refresh import ensure_tiktok_token, ensure_twitter_token
 
     account = db.query(SocialAccount).filter(
         SocialAccount.user_id == user_id,
@@ -591,6 +591,8 @@ def publish_to_platform(db, user_id: str, platform: str, caption: str, media_url
             media_type=media_type,
         )}
     if platform == "twitter":
+        if not ensure_twitter_token(account, db):
+            return {"platform": "twitter", "success": False, "error": "Twitter token expired, reconnect Twitter in Settings"}
         return {"platform": platform, **publish_to_twitter(
             access_token=account.access_token,
             caption=caption,

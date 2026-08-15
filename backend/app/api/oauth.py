@@ -291,7 +291,10 @@ async def twitter_callback(code: str, state: str = "", db: Session = Depends(get
         handle = me_data.get("username", "")
         platform_user_id = me_data.get("id", "")
 
-    _upsert_account(db, state, "twitter", data["access_token"], data.get("refresh_token"), handle, platform_user_id)
+    expires_in = int(data.get("expires_in", 7200))
+    token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    _upsert_account(db, state, "twitter", data["access_token"], data.get("refresh_token"),
+                    handle, platform_user_id, token_expires_at=token_expires_at)
     return RedirectResponse(_settings_redirect("twitter"))
 
 
