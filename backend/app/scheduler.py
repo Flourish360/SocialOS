@@ -223,7 +223,7 @@ def _refresh_instagram_tokens():
 def _capture_audience_snapshots():
     """Once a day, capture each connected Instagram account's real hourly online-follower
     activity so /ai/best-time and /analytics/heatmap can build a genuine weekly pattern
-    instead of guessing — accuracy improves as snapshots accumulate over the week."""
+    instead of guessing. Accuracy improves as snapshots accumulate over the week."""
     from .db.database import SessionLocal
     from .models.social_account import SocialAccount
     from .models.audience_snapshot import AudienceSnapshot
@@ -264,7 +264,7 @@ def _log_and_bump(db, rule, external_ref: str) -> bool:
     """Record an AutomationLog row for this (rule, external_ref) pair and bump
     the rule's run_count/last_run. Returns False (no-op) if this event was
     already handled. APScheduler runs this job with max_instances=1, so a
-    plain existence check is safe here — no rollback() mid-loop, which would
+    plain existence check is safe here, no rollback() mid-loop, which would
     otherwise wipe out every other uncommitted change from earlier rules in
     the same evaluation pass. The DB unique constraint on AutomationLog stays
     as a last-resort guard, not the primary mechanism."""
@@ -291,6 +291,27 @@ def _dispatch_notify(db, user_id: str, rule, title: str, body: str):
         icon_key=rule.trigger_type,
         rule_id=rule.id,
     ))
+
+
+def _scoped_posts(db, Post, user_id: str, post_id):
+    """Posts a post-scoped rule (comment_keyword, post_likes) should evaluate.
+
+    If the rule was scoped to a specific post (config.post_id, set via the
+    "Post to automate" picker in the rule builder), evaluate only that one.
+    Otherwise fall back to the last 10 published posts, the original
+    behavior, so existing rules created before this feature keep working."""
+    if post_id:
+        post = db.query(Post).filter(
+            Post.id == post_id,
+            Post.user_id == user_id,
+            Post.status == "published",
+        ).first()
+        return [post] if post else []
+    return db.query(Post).filter(
+        Post.user_id == user_id,
+        Post.status == "published",
+        Post.platform_post_ids.isnot(None),
+    ).order_by(Post.published_at.desc()).limit(10).all()
 
 
 def _evaluate_automation_rules():
@@ -325,11 +346,7 @@ def _evaluate_automation_rules():
                 ).first()
                 if not account or not account.access_token:
                     continue
-                posts = db.query(Post).filter(
-                    Post.user_id == rule.user_id,
-                    Post.status == "published",
-                    Post.platform_post_ids.isnot(None),
-                ).order_by(Post.published_at.desc()).limit(10).all()
+                posts = _scoped_posts(db, Post, rule.user_id, config.get("post_id"))
 
                 for post in posts:
                     ig_media_id = (post.platform_post_ids or {}).get("instagram")
@@ -399,11 +416,7 @@ def _evaluate_automation_rules():
                 ).first()
                 if not account or not account.access_token:
                     continue
-                posts = db.query(Post).filter(
-                    Post.user_id == rule.user_id,
-                    Post.status == "published",
-                    Post.platform_post_ids.isnot(None),
-                ).order_by(Post.published_at.desc()).limit(10).all()
+                posts = _scoped_posts(db, Post, rule.user_id, config.get("post_id"))
 
                 for post in posts:
                     ig_media_id = (post.platform_post_ids or {}).get("instagram")

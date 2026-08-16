@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
-import { automationApi } from "@/lib/api";
+import { automationApi, postsApi } from "@/lib/api";
 import {
   Zap, Plus, Power, Clock, Hash, TrendingDown, Calendar, X, Loader2,
   ArrowRight, Bell, RefreshCw, MessageSquare, Mail, Trash2, ChevronDown,
@@ -32,6 +32,11 @@ const ACTION_ICONS: Record<string, any> = {
 
 const DEFAULT_RULE = { name: "", trigger_type: "post_likes", action_type: "notify", description: "", config: {} as Record<string, string> };
 
+interface PickablePost {
+  id: string;
+  caption: string;
+}
+
 export default function AutomationPage() {
   const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,10 +44,21 @@ export default function AutomationPage() {
   const [form, setForm] = useState(DEFAULT_RULE);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [posts, setPosts] = useState<PickablePost[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
 
   useEffect(() => {
     automationApi.rules().then(setRules).finally(() => setLoading(false));
   }, []);
+
+  // Posts to pick from are only needed once the builder is open on a
+  // post-scoped trigger, fetch lazily rather than on every page load.
+  useEffect(() => {
+    if (!showNew || posts.length > 0) return;
+    if (form.trigger_type !== "comment_keyword" && form.trigger_type !== "post_likes") return;
+    setPostsLoading(true);
+    postsApi.list("published").then(setPosts).finally(() => setPostsLoading(false));
+  }, [showNew, form.trigger_type, posts.length]);
 
   const createRule = async () => {
     if (!form.name.trim()) { toast.error("Rule name is required"); return; }
@@ -213,6 +229,30 @@ export default function AutomationPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Post picker, shown for triggers that watch a specific post's
+                  comments/likes rather than the whole account */}
+              {(form.trigger_type === "comment_keyword" || form.trigger_type === "post_likes") && (
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5">Post to automate</label>
+                  <select
+                    className="input w-full"
+                    value={form.config.post_id ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, config: { ...f.config, post_id: e.target.value } }))}
+                  >
+                    <option value="">All recent posts (last 10 published)</option>
+                    {posts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.caption.length > 70 ? `${p.caption.slice(0, 70)}…` : p.caption}
+                      </option>
+                    ))}
+                  </select>
+                  {postsLoading && <p className="text-[11px] text-slate-500 mt-1">Loading your posts…</p>}
+                  {!postsLoading && posts.length === 0 && (
+                    <p className="text-[11px] text-slate-500 mt-1">No published posts yet, this will apply to your next 10 once you have some.</p>
+                  )}
+                </div>
+              )}
 
               {/* Trigger/action config fields, shown conditionally */}
               {(triggerInfo?.value === "post_likes" || triggerInfo?.value === "follower_drop" || triggerInfo?.value === "comment_keyword" || triggerInfo?.value === "schedule" || actionInfo?.value === "auto_reply") && (
@@ -401,6 +441,9 @@ export default function AutomationPage() {
                               {TRIGGER_OPTIONS.find((t) => t.value === rule.trigger_type)?.label ?? rule.trigger_type}
                             </p>
                           </div>
+                          {rule.config?.post_id && (
+                            <p className="text-[11px] text-slate-500 mt-1">Scoped to one specific post</p>
+                          )}
                         </div>
                         <div className="flex items-center">
                           <ArrowRight className="w-4 h-4 text-slate-600" />
