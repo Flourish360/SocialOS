@@ -1,13 +1,14 @@
 import hashlib
 import hmac
 import secrets
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
-from ..db.database import get_db
+from ..db.database import get_db, SessionLocal
 from ..models.user import User
 from ..models.social_account import SocialAccount
 from ..models.post import Post, PostPlatformTarget
@@ -74,6 +75,18 @@ def _generate_caption(client, system_prompt: str, context: str) -> str | None:
         messages=[{"role": "user", "content": context}],
     ))
     return _text(resp) if resp else None
+
+
+def _generate_captions_parallel(client, prompts: dict[str, str], context: str) -> dict[str, str]:
+    """Generate one caption per platform concurrently instead of one Claude
+    call after another, this was the single biggest source of latency on
+    the ecommerce endpoints (5 sequential model calls per event)."""
+    captions: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=len(prompts)) as pool:
+        futures = {pool.submit(_generate_caption, client, prompt, context): platform for platform, prompt in prompts.items()}
+        for future in as_completed(futures):
+            captions[futures[future]] = future.result()
+    return captions
 
 
 def _resolve_api_key(raw: str, db: Session) -> tuple[User, ApiKey]:
@@ -148,15 +161,39 @@ def _create_posts(
     is_live = action == "post_now"
     results = []
 
+    # Multiple images need media_type="carousel" or Instagram's publish flow
+    # (and the stored Post record) only ever sends media_urls[0], the rest
+    # are silently dropped even though they were correctly passed through.
+    media_type = "carousel" if len(media_urls) > 1 else ("image" if media_urls else "none")
+
+    # "post_now" means publish for real, right now, never fabricate a
+    # "published" status without actually calling the platform's API. Each
+    # platform's publish call (including TikTok's up-to-2-minute status
+    # poll) used to run one after another; now they run concurrently, each
+    # on its own DB session since SQLAlchemy sessions aren't safe to share
+    # across threads (a concurrent token-refresh commit could corrupt the
+    # shared request session).
+    publish_results: dict[str, dict] = {}
+    if is_live:
+        def _publish_one(account_platform: str, caption: str) -> dict:
+            thread_db = SessionLocal()
+            try:
+                return publish_to_platform(thread_db, user.id, account_platform, caption, media_urls, media_type)
+            finally:
+                thread_db.close()
+
+        with ThreadPoolExecutor(max_workers=len(accounts)) as pool:
+            futures = {
+                pool.submit(_publish_one, account.platform, captions.get(account.platform) or captions.get("instagram", "")): account.platform
+                for account in accounts
+            }
+            for future in as_completed(futures):
+                publish_results[futures[future]] = future.result()
+
     for account in accounts:
         caption = captions.get(account.platform) or captions.get("instagram", "")
 
-        # "post_now" means publish for real, right now — never fabricate a
-        # "published" status without actually calling the platform's API.
-        publish_result = (
-            publish_to_platform(db, user.id, account.platform, caption, media_urls, "image" if media_urls else "none")
-            if is_live else None
-        )
+        publish_result = publish_results.get(account.platform)
         succeeded = bool(publish_result and publish_result.get("success"))
         platform_post_id = publish_result.get("post_id") if publish_result else None
         error_message = publish_result.get("error") if publish_result and not succeeded else None
@@ -165,12 +202,12 @@ def _create_posts(
             user_id=user.id,
             caption=caption,
             media_urls=media_urls,
-            media_type="image" if media_urls else "none",
+            media_type=media_type,
             status=("published" if succeeded else "failed") if is_live else "scheduled",
             published_at=now if succeeded else None,
             scheduled_at=None if is_live else now,
             # One Post row per platform here, so this is always a single-item
-            # list — kept as a list of platform NAMES (not account IDs) so the
+            # list, kept as a list of platform NAMES (not account IDs) so the
             # scheduler's _publish_due_posts can match SocialAccount.platform.
             platform_account_ids=[account.platform],
             platform_post_ids=(
@@ -423,14 +460,17 @@ def ingest_product(
         ),
     }
 
-    captions: dict[str, str] = {}
     if client:
-        for platform, prompt in platform_prompts.items():
-            caption = _generate_caption(client, prompt, context)
-            captions[platform] = caption or _fallback_product(body.name, body.price, body.currency, platform)
+        generated = _generate_captions_parallel(client, platform_prompts, context)
+        captions = {
+            platform: generated.get(platform) or _fallback_product(body.name, body.price, body.currency, platform)
+            for platform in platform_prompts
+        }
     else:
-        for platform in platform_prompts:
-            captions[platform] = _fallback_product(body.name, body.price, body.currency, platform)
+        captions = {
+            platform: _fallback_product(body.name, body.price, body.currency, platform)
+            for platform in platform_prompts
+        }
 
     results = _create_posts(
         db=db, user=user,
@@ -493,28 +533,32 @@ def ingest_sale(
         f"Attributes: {attrs_str}" if attrs_str else None,
     ]))
 
-    captions: dict[str, str] = {}
+    def _concrete_prompt(platform: str) -> str:
+        return (
+            get_platform_prompt(template_key, platform)
+            .replace("{units_remaining}", str(body.units_remaining or ""))
+            .replace("{product_name}", body.product_name)
+            .replace("{price}", f"{body.currency} {body.price:,.2f}")
+            .replace("{buyer_location}", body.buyer_location or "")
+            .replace("{quantity_sold}", str(body.quantity_sold))
+        )
+
     if client:
-        for platform in SUPPORTED_PLATFORMS:
-            base_prompt = get_platform_prompt(template_key, platform)
-            # Inject real values so the prompt is fully concrete
-            prompt = (
-                base_prompt
-                .replace("{units_remaining}", str(body.units_remaining or ""))
-                .replace("{product_name}", body.product_name)
-                .replace("{price}", f"{body.currency} {body.price:,.2f}")
-                .replace("{buyer_location}", body.buyer_location or "")
-                .replace("{quantity_sold}", str(body.quantity_sold))
-            )
-            caption = _generate_caption(client, prompt, context)
-            captions[platform] = caption or _fallback_sale(
+        prompts = {platform: _concrete_prompt(platform) for platform in SUPPORTED_PLATFORMS}
+        generated = _generate_captions_parallel(client, prompts, context)
+        captions = {
+            platform: generated.get(platform) or _fallback_sale(
                 body.product_name, body.price, body.currency, template_key, platform, body.units_remaining
             )
+            for platform in SUPPORTED_PLATFORMS
+        }
     else:
-        for platform in SUPPORTED_PLATFORMS:
-            captions[platform] = _fallback_sale(
+        captions = {
+            platform: _fallback_sale(
                 body.product_name, body.price, body.currency, template_key, platform, body.units_remaining
             )
+            for platform in SUPPORTED_PLATFORMS
+        }
 
     results = _create_posts(
         db=db, user=user,
