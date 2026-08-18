@@ -16,6 +16,7 @@ from ..models.api_key import ApiKey
 from ..api.deps import get_current_user
 from ..core.config import settings
 from ..services.publishers import publish_to_platform
+from ..services.captions import ensure_hashtag_in_text
 from .ecommerce_templates import pick_template, get_platform_prompt
 
 router = APIRouter(prefix="/ecommerce", tags=["ecommerce"])
@@ -74,7 +75,8 @@ def _generate_caption(client, system_prompt: str, context: str) -> str | None:
         system=full_system,
         messages=[{"role": "user", "content": context}],
     ))
-    return _text(resp) if resp else None
+    text = _text(resp) if resp else None
+    return ensure_hashtag_in_text(text) if text else None
 
 
 def _generate_captions_parallel(client, prompts: dict[str, str], context: str) -> dict[str, str]:
@@ -109,27 +111,30 @@ def _resolve_api_key(raw: str, db: Session) -> tuple[User, ApiKey]:
 
 def _fallback_product(name: str, price: float, currency: str, platform: str) -> str:
     p = f"{currency} {price:,.2f}"
-    return {
+    text = {
         "instagram": f"New drop: {name} at {p}. Shop now, link in bio. #NewProduct #ShopNow",
         "tiktok": f"Just dropped: {name} for {p}! Check the link in bio. #fyp #newdrop",
         "twitter": f"New: {name} at {p}. Shop now.",
         "linkedin": f"We just listed {name} at {p}. Check it out.",
         "facebook": f"New arrival: {name} at {p}. Shop now!",
     }.get(platform, f"New: {name} at {p}")
+    return ensure_hashtag_in_text(text)
 
 
 def _fallback_sale(name: str, price: float, currency: str, template_key: str, platform: str, units_remaining: int | None) -> str:
     p = f"{currency} {price:,.2f}"
     if template_key == "unique_item":
-        return f"{name} has found its forever home. Thank you to the collector. One of one."
-    if template_key == "sold_out":
-        return f"{name} is sold out! Follow for restock updates."
-    if template_key == "scarcity":
+        text = f"{name} has found its forever home. Thank you to the collector. One of one."
+    elif template_key == "sold_out":
+        text = f"{name} is sold out! Follow for restock updates."
+    elif template_key == "scarcity":
         rem = f"Only {units_remaining} left!" if units_remaining else "Almost gone!"
-        return f"{rem} {name} at {p}. Grab yours now."
-    if template_key == "milestone":
-        return f"Another milestone! {name} keeps selling. Thank you all."
-    return f"Just sold: {name} at {p}. Still available, shop now!"
+        text = f"{rem} {name} at {p}. Grab yours now."
+    elif template_key == "milestone":
+        text = f"Another milestone! {name} keeps selling. Thank you all."
+    else:
+        text = f"Just sold: {name} at {p}. Still available, shop now!"
+    return ensure_hashtag_in_text(text)
 
 
 def _create_posts(

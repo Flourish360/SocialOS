@@ -6,6 +6,7 @@ from ..models.user import User
 from ..models.social_account import SocialAccount
 from ..schemas.post import AIGenerateRequest, AIRewriteRequest, HashtagSuggestRequest
 from ..core.config import settings
+from ..services.captions import ensure_hashtag_in_text
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -108,7 +109,7 @@ def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_c
             messages=[{"role": "user", "content": f"Write a caption about: {body.topic}"}],
         ))
         if resp:
-            caption = _text(resp)
+            caption = ensure_hashtag_in_text(_text(resp))
             hashtags = []
             if body.include_hashtags:
                 h_resp = _safe_claude_call(lambda: client.messages.create(
@@ -129,7 +130,7 @@ def generate_caption(body: AIGenerateRequest, current_user: User = Depends(get_c
                 "ai_model": MODEL,
             }
 
-    caption = MOCK_CAPTIONS.get(body.tone, MOCK_CAPTIONS["casual"])
+    caption = ensure_hashtag_in_text(MOCK_CAPTIONS.get(body.tone, MOCK_CAPTIONS["casual"]))
     hashtags = MOCK_HASHTAGS.get(body.platform, MOCK_HASHTAGS["instagram"])[:10]
     return {
         "caption": caption,
@@ -357,7 +358,7 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
                     if text.startswith("json"):
                         text = text[4:]
                 data = json.loads(text.strip())
-                captions = data.get("captions", [])
+                captions = [ensure_hashtag_in_text(c) for c in data.get("captions", [])]
                 return {"captions": captions, "topic": topic, "tone": tone, "platform": platform, "ai_model": MODEL}
             except Exception:
                 pass
@@ -399,7 +400,7 @@ def generate_captions(body: dict, current_user: User = Depends(get_current_user)
         "facebook": "",
     }.get(platform, "")
 
-    return {"captions": [c + platform_suffix for c in captions], "topic": topic, "tone": tone, "platform": platform, "ai_model": "mock"}
+    return {"captions": [ensure_hashtag_in_text(c + platform_suffix) for c in captions], "topic": topic, "tone": tone, "platform": platform, "ai_model": "mock"}
 
 
 @router.post("/analyze-sentiment")
