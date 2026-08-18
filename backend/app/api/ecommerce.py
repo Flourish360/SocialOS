@@ -306,15 +306,12 @@ def create_key(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    existing = db.query(ApiKey).filter(
+    # Generating a new key rotates out any existing one, only one key is ever
+    # usable at a time, but the user doesn't have to revoke manually first.
+    db.query(ApiKey).filter(
         ApiKey.user_id == current_user.id,
         ApiKey.is_active == True,
-    ).first()
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail="You already have an active API key. Revoke it before generating a new one.",
-        )
+    ).update({"is_active": False})
 
     raw = "sk_live_" + secrets.token_hex(24)
     key = ApiKey(

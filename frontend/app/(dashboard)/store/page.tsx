@@ -77,6 +77,7 @@ function KeysPanel() {
 
   const handleCreate = async () => {
     if (!newName.trim()) { toast.error("Enter a store name"); return; }
+    if (keys.length > 0 && !confirm("Generating a new key deactivates your current one immediately. Any store using it will stop working until you update it. Continue?")) return;
     setCreating(true);
     try {
       const data = await ecommerceApi.createKey(newName.trim());
@@ -110,28 +111,27 @@ function KeysPanel() {
 
   return (
     <div className="space-y-4">
-      {/* New key form — one active key per user, hidden once you have one */}
-      {keys.length === 0 ? (
-        <div className="flex gap-2">
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            placeholder="Store name (e.g. My Fashion Store)"
-            className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-          />
-          <button
-            onClick={handleCreate}
-            disabled={creating}
-            className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            {creating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-            Generate Key
-          </button>
-        </div>
-      ) : (
+      {/* New key form — generating a new key rotates out any existing one */}
+      <div className="flex gap-2">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          placeholder="Store name (e.g. My Fashion Store)"
+          className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+        />
+        <button
+          onClick={handleCreate}
+          disabled={creating}
+          className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
+          {creating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+          Generate Key
+        </button>
+      </div>
+      {keys.length > 0 && (
         <p className="text-xs text-slate-500">
-          You can only have one active API key at a time. Revoke the key below to generate a new one.
+          Generating a new key immediately deactivates your current one. Any store using it will need updating.
         </p>
       )}
 
