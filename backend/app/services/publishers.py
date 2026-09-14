@@ -12,6 +12,22 @@ IG_API = "https://graph.instagram.com/v21.0"
 BACKEND_BASE = "https://socialos-production-1712.up.railway.app"
 
 
+def _cloudinary_ready() -> bool:
+    return bool(settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET)
+
+
+def _configure_cloudinary():
+    import cloudinary
+
+    cloudinary.config(
+        cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+        api_key=settings.CLOUDINARY_API_KEY,
+        api_secret=settings.CLOUDINARY_API_SECRET,
+        secure=True,
+    )
+    return cloudinary
+
+
 def _ensure_instagram_jpeg(image_url: str) -> str:
     """Re-encode an image through Cloudinary as JPEG for Instagram.
 
@@ -25,18 +41,12 @@ def _ensure_instagram_jpeg(image_url: str) -> str:
     to the original URL so a Cloudinary hiccup doesn't newly break sources
     that were already JPEG.
     """
-    if not (settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET):
+    if not _cloudinary_ready():
         return image_url
     try:
-        import cloudinary
         import cloudinary.uploader
 
-        cloudinary.config(
-            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-            api_key=settings.CLOUDINARY_API_KEY,
-            api_secret=settings.CLOUDINARY_API_SECRET,
-            secure=True,
-        )
+        _configure_cloudinary()
         result = cloudinary.uploader.upload(
             image_url,
             folder="socialos/instagram-jpeg",
@@ -46,6 +56,52 @@ def _ensure_instagram_jpeg(image_url: str) -> str:
         return result["secure_url"]
     except Exception as e:
         log.warning("Instagram JPEG conversion failed for %s: %s", image_url, e)
+        return image_url
+
+
+def stamp_sold_photo(image_url: str) -> str:
+    """Stamp a SOLD badge onto a product photo, returned as JPEG.
+
+    Used for product_sold posts: the caption text already says "Sold on...",
+    but nobody reads captions scrolling a feed grid, so an active listing and
+    a sold item looked identical at a glance. This is deliberately just a
+    corner badge, not the full branded template (logo, colored frame) that
+    was scoped out earlier. Same graceful-fallback shape as
+    _ensure_instagram_jpeg: any failure returns the original URL untouched.
+    """
+    if not _cloudinary_ready():
+        return image_url
+    try:
+        import cloudinary.uploader
+        import cloudinary.utils
+
+        _configure_cloudinary()
+        uploaded = cloudinary.uploader.upload(
+            image_url,
+            folder="socialos/sold-stamp",
+            resource_type="image",
+        )
+        url, _ = cloudinary.utils.cloudinary_url(
+            uploaded["public_id"],
+            format="jpg",
+            transformation=[
+                {
+                    "overlay": {
+                        "font_family": "Arial",
+                        "font_size": 56,
+                        "font_weight": "bold",
+                        "text": "SOLD",
+                    },
+                    "color": "white",
+                    "background": "#c0392b",
+                },
+                {"radius": 10},
+                {"gravity": "south_east", "x": 24, "y": 24, "flags": "layer_apply"},
+            ],
+        )
+        return url
+    except Exception as e:
+        log.warning("Sold stamp failed for %s: %s", image_url, e)
         return image_url
 
 

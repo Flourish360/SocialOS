@@ -15,7 +15,7 @@ from ..models.post import Post, PostPlatformTarget
 from ..models.api_key import ApiKey
 from ..api.deps import get_current_user
 from ..core.config import settings
-from ..services.publishers import publish_to_platform
+from ..services.publishers import publish_to_platform, stamp_sold_photo
 from ..services.captions import ensure_hashtag_in_text
 from .ecommerce_templates import pick_template, get_platform_prompt
 
@@ -166,6 +166,14 @@ def _create_posts(
     now = datetime.now(timezone.utc)
     is_live = action == "post_now"
     results = []
+
+    # Sold items need to read as sold on the feed grid itself, not just in
+    # the caption (nobody reads captions scrolling a grid). Stamped once
+    # here so every platform's publish call and the stored Post record both
+    # get the same stamped photo, not just whichever platform happens to
+    # apply its own formatting.
+    if event_tag == "product_sold":
+        media_urls = [stamp_sold_photo(url) for url in media_urls]
 
     # Multiple images need media_type="carousel" or Instagram's publish flow
     # (and the stored Post record) only ever sends media_urls[0], the rest
