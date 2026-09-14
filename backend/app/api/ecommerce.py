@@ -146,6 +146,7 @@ def _create_posts(
     action: str,
     event_tag: str,
     order_id: str | None = None,
+    ai_generated: bool = True,
 ) -> list[dict]:
     accounts = db.query(SocialAccount).filter(
         SocialAccount.user_id == user.id,
@@ -219,7 +220,7 @@ def _create_posts(
                 {**({"_order_id": order_id} if order_id else {}), account.platform: platform_post_id}
                 if platform_post_id else ({"_order_id": order_id} if order_id else {})
             ),
-            ai_generated=True,
+            ai_generated=ai_generated,
             content_type_tag=event_tag,
         )
         db.add(post)
@@ -500,6 +501,7 @@ def ingest_product(
         platform_filter=body.platforms,
         action=body.action,
         event_tag="product_listed",
+        ai_generated=not body.raw_caption,
     )
 
     return {
@@ -596,6 +598,7 @@ def ingest_sale(
         action=body.action,
         event_tag="product_sold",
         order_id=body.order_id,
+        ai_generated=not body.raw_caption,
     )
 
     return {
