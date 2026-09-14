@@ -303,7 +303,7 @@ function FeedPanel() {
 
                 {/* Body */}
                 <div className="p-3 space-y-2.5">
-                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">{post.caption}</p>
+                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-3 whitespace-pre-line">{post.caption}</p>
 
                   {/* Platforms */}
                   <div className="flex flex-wrap gap-1.5">

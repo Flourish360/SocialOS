@@ -4,11 +4,49 @@ import logging
 import time
 import urllib.parse
 from urllib.parse import urlsplit
+from ..core.config import settings
 
 log = logging.getLogger(__name__)
 
 IG_API = "https://graph.instagram.com/v21.0"
 BACKEND_BASE = "https://socialos-production-1712.up.railway.app"
+
+
+def _ensure_instagram_jpeg(image_url: str) -> str:
+    """Re-encode an image through Cloudinary as JPEG for Instagram.
+
+    Instagram's Content Publishing API only accepts JPEG for image_url,
+    its own docs explicitly exclude even other JPEG variants like MPO/JPS,
+    let alone WebP or PNG. A connected store that serves WebP (Real Okrika
+    does, for its own site's performance) would otherwise fail on every
+    single-image or carousel post. Runs unconditionally rather than trying
+    to sniff the source format from the URL, which is unreliable (no
+    extension, a CDN query string, a redirect). On any failure, falls back
+    to the original URL so a Cloudinary hiccup doesn't newly break sources
+    that were already JPEG.
+    """
+    if not (settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET):
+        return image_url
+    try:
+        import cloudinary
+        import cloudinary.uploader
+
+        cloudinary.config(
+            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+            api_key=settings.CLOUDINARY_API_KEY,
+            api_secret=settings.CLOUDINARY_API_SECRET,
+            secure=True,
+        )
+        result = cloudinary.uploader.upload(
+            image_url,
+            folder="socialos/instagram-jpeg",
+            resource_type="image",
+            format="jpg",
+        )
+        return result["secure_url"]
+    except Exception as e:
+        log.warning("Instagram JPEG conversion failed for %s: %s", image_url, e)
+        return image_url
 
 
 def _wait_for_container(client: httpx.Client, container_id: str, access_token: str, max_attempts: int = 30) -> str | None:
@@ -80,7 +118,7 @@ def publish_to_instagram(
                     child_resp = client.post(
                         f"{IG_API}/{ig_user_id}/media",
                         data={
-                            "image_url": url,
+                            "image_url": _ensure_instagram_jpeg(url),
                             "is_carousel_item": "true",
                             "access_token": access_token,
                         },
@@ -119,7 +157,7 @@ def publish_to_instagram(
                 container_resp = client.post(
                     f"{IG_API}/{ig_user_id}/media",
                     data={
-                        "image_url": media_urls[0],
+                        "image_url": _ensure_instagram_jpeg(media_urls[0]),
                         "caption": caption,
                         "access_token": access_token,
                     },
