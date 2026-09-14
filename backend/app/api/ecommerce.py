@@ -274,6 +274,11 @@ class ProductRequest(BaseModel):
     platforms: list[str] | None = None
     action: str = "queue"       # post_now | queue
     template: str | None = None
+    # When set, posted verbatim (after the standard #socialos tag) for every
+    # platform instead of an AI-generated caption. For callers that already
+    # produce their own deterministic, pre-formatted text and need it posted
+    # unrewritten, not used as AI context.
+    raw_caption: str | None = None
 
     @field_validator("action")
     @classmethod
@@ -299,6 +304,9 @@ class SaleRequest(BaseModel):
     platforms: list[str] | None = None
     action: str = "post_now"    # post_now | queue
     template: str | None = None
+    # See ProductRequest.raw_caption: same deal, posted verbatim instead of
+    # AI-generated when set.
+    raw_caption: str | None = None
 
     @field_validator("order_status")
     @classmethod
@@ -426,56 +434,64 @@ def ingest_product(
     db: Session = Depends(get_db),
 ):
     user, api_key = _resolve_api_key(x_api_key, db)
-    client = _claude_client()
 
-    attrs_str = ", ".join(f"{k}: {v}" for k, v in body.attributes.items()) if body.attributes else ""
-    context = "\n".join(filter(None, [
-        f"Product name: {body.name}",
-        f"Price: {body.currency} {body.price:,.2f}",
-        f"Description: {body.description}" if body.description else None,
-        f"URL: {body.url}" if body.url else None,
-        f"Attributes: {attrs_str}" if attrs_str else None,
-    ]))
-
-    platform_prompts = {
-        "instagram": (
-            f"Write an Instagram caption announcing a new product called '{body.name}' "
-            f"priced at {body.currency} {body.price:,.2f}. "
-            f"{'Include this context: ' + body.description + '. ' if body.description else ''}"
-            f"{'Attributes: ' + attrs_str + '. ' if attrs_str else ''}"
-            "Make it exciting. Add 5 to 8 relevant hashtags at the end. "
-            "Finish with 'Link in bio.' on its own line."
-        ),
-        "tiktok": (
-            f"Write a TikTok caption for a new product '{body.name}' at {body.currency} {body.price:,.2f}. "
-            "Start with a punchy hook. Keep it under 150 characters. 2 to 3 emojis. "
-            "End with a CTA pointing to the link in bio."
-        ),
-        "twitter": (
-            f"Write a tweet announcing new product '{body.name}' at {body.currency} {body.price:,.2f}. "
-            "Under 240 characters. Concise and punchy. 1 emoji max."
-        ),
-        "linkedin": (
-            f"Write a LinkedIn post announcing '{body.name}' at {body.currency} {body.price:,.2f}. "
-            "Professional tone. 2 to 3 sentences. No hashtags."
-        ),
-        "facebook": (
-            f"Write a Facebook post for new product '{body.name}' at {body.currency} {body.price:,.2f}. "
-            "Friendly and casual. 1 to 2 emojis. Clear CTA. Under 200 characters."
-        ),
-    }
-
-    if client:
-        generated = _generate_captions_parallel(client, platform_prompts, context)
-        captions = {
-            platform: generated.get(platform) or _fallback_product(body.name, body.price, body.currency, platform)
-            for platform in platform_prompts
-        }
+    if body.raw_caption:
+        # Caller already produced deterministic, pre-formatted text and
+        # wants it posted unrewritten, skip AI generation entirely so
+        # nothing downstream touches the wording.
+        raw = ensure_hashtag_in_text(body.raw_caption)
+        captions = {platform: raw for platform in SUPPORTED_PLATFORMS}
     else:
-        captions = {
-            platform: _fallback_product(body.name, body.price, body.currency, platform)
-            for platform in platform_prompts
+        client = _claude_client()
+
+        attrs_str = ", ".join(f"{k}: {v}" for k, v in body.attributes.items()) if body.attributes else ""
+        context = "\n".join(filter(None, [
+            f"Product name: {body.name}",
+            f"Price: {body.currency} {body.price:,.2f}",
+            f"Description: {body.description}" if body.description else None,
+            f"URL: {body.url}" if body.url else None,
+            f"Attributes: {attrs_str}" if attrs_str else None,
+        ]))
+
+        platform_prompts = {
+            "instagram": (
+                f"Write an Instagram caption announcing a new product called '{body.name}' "
+                f"priced at {body.currency} {body.price:,.2f}. "
+                f"{'Include this context: ' + body.description + '. ' if body.description else ''}"
+                f"{'Attributes: ' + attrs_str + '. ' if attrs_str else ''}"
+                "Make it exciting. Add 5 to 8 relevant hashtags at the end. "
+                "Finish with 'Link in bio.' on its own line."
+            ),
+            "tiktok": (
+                f"Write a TikTok caption for a new product '{body.name}' at {body.currency} {body.price:,.2f}. "
+                "Start with a punchy hook. Keep it under 150 characters. 2 to 3 emojis. "
+                "End with a CTA pointing to the link in bio."
+            ),
+            "twitter": (
+                f"Write a tweet announcing new product '{body.name}' at {body.currency} {body.price:,.2f}. "
+                "Under 240 characters. Concise and punchy. 1 emoji max."
+            ),
+            "linkedin": (
+                f"Write a LinkedIn post announcing '{body.name}' at {body.currency} {body.price:,.2f}. "
+                "Professional tone. 2 to 3 sentences. No hashtags."
+            ),
+            "facebook": (
+                f"Write a Facebook post for new product '{body.name}' at {body.currency} {body.price:,.2f}. "
+                "Friendly and casual. 1 to 2 emojis. Clear CTA. Under 200 characters."
+            ),
         }
+
+        if client:
+            generated = _generate_captions_parallel(client, platform_prompts, context)
+            captions = {
+                platform: generated.get(platform) or _fallback_product(body.name, body.price, body.currency, platform)
+                for platform in platform_prompts
+            }
+        else:
+            captions = {
+                platform: _fallback_product(body.name, body.price, body.currency, platform)
+                for platform in platform_prompts
+            }
 
     results = _create_posts(
         db=db, user=user,
@@ -518,52 +534,59 @@ def ingest_sale(
             detail=f"Order '{body.order_id}' has already been posted. Duplicate webhook ignored.",
         )
 
-    template_key = pick_template(
-        units_remaining=body.units_remaining,
-        buyer_location=body.buyer_location,
-        quantity_sold=body.quantity_sold,
-        is_unique=body.is_unique,
-        override=body.template,
-    )
-
-    client = _claude_client()
-    attrs_str = ", ".join(f"{k}: {v}" for k, v in body.attributes.items()) if body.attributes else ""
-    context = "\n".join(filter(None, [
-        f"Product: {body.product_name}",
-        f"Price: {body.currency} {body.price:,.2f}",
-        f"Quantity sold: {body.quantity_sold}",
-        f"Units remaining: {body.units_remaining}" if body.units_remaining is not None else None,
-        f"One of a kind: {body.is_unique}",
-        f"Buyer location: {body.buyer_location}" if body.buyer_location else None,
-        f"Attributes: {attrs_str}" if attrs_str else None,
-    ]))
-
-    def _concrete_prompt(platform: str) -> str:
-        return (
-            get_platform_prompt(template_key, platform)
-            .replace("{units_remaining}", str(body.units_remaining or ""))
-            .replace("{product_name}", body.product_name)
-            .replace("{price}", f"{body.currency} {body.price:,.2f}")
-            .replace("{buyer_location}", body.buyer_location or "")
-            .replace("{quantity_sold}", str(body.quantity_sold))
+    if body.raw_caption:
+        # Caller already produced deterministic, pre-formatted text and
+        # wants it posted unrewritten, skip template/AI generation entirely.
+        template_key = "raw_caption"
+        raw = ensure_hashtag_in_text(body.raw_caption)
+        captions = {platform: raw for platform in SUPPORTED_PLATFORMS}
+    else:
+        template_key = pick_template(
+            units_remaining=body.units_remaining,
+            buyer_location=body.buyer_location,
+            quantity_sold=body.quantity_sold,
+            is_unique=body.is_unique,
+            override=body.template,
         )
 
-    if client:
-        prompts = {platform: _concrete_prompt(platform) for platform in SUPPORTED_PLATFORMS}
-        generated = _generate_captions_parallel(client, prompts, context)
-        captions = {
-            platform: generated.get(platform) or _fallback_sale(
-                body.product_name, body.price, body.currency, template_key, platform, body.units_remaining
+        client = _claude_client()
+        attrs_str = ", ".join(f"{k}: {v}" for k, v in body.attributes.items()) if body.attributes else ""
+        context = "\n".join(filter(None, [
+            f"Product: {body.product_name}",
+            f"Price: {body.currency} {body.price:,.2f}",
+            f"Quantity sold: {body.quantity_sold}",
+            f"Units remaining: {body.units_remaining}" if body.units_remaining is not None else None,
+            f"One of a kind: {body.is_unique}",
+            f"Buyer location: {body.buyer_location}" if body.buyer_location else None,
+            f"Attributes: {attrs_str}" if attrs_str else None,
+        ]))
+
+        def _concrete_prompt(platform: str) -> str:
+            return (
+                get_platform_prompt(template_key, platform)
+                .replace("{units_remaining}", str(body.units_remaining or ""))
+                .replace("{product_name}", body.product_name)
+                .replace("{price}", f"{body.currency} {body.price:,.2f}")
+                .replace("{buyer_location}", body.buyer_location or "")
+                .replace("{quantity_sold}", str(body.quantity_sold))
             )
-            for platform in SUPPORTED_PLATFORMS
-        }
-    else:
-        captions = {
-            platform: _fallback_sale(
-                body.product_name, body.price, body.currency, template_key, platform, body.units_remaining
-            )
-            for platform in SUPPORTED_PLATFORMS
-        }
+
+        if client:
+            prompts = {platform: _concrete_prompt(platform) for platform in SUPPORTED_PLATFORMS}
+            generated = _generate_captions_parallel(client, prompts, context)
+            captions = {
+                platform: generated.get(platform) or _fallback_sale(
+                    body.product_name, body.price, body.currency, template_key, platform, body.units_remaining
+                )
+                for platform in SUPPORTED_PLATFORMS
+            }
+        else:
+            captions = {
+                platform: _fallback_sale(
+                    body.product_name, body.price, body.currency, template_key, platform, body.units_remaining
+                )
+                for platform in SUPPORTED_PLATFORMS
+            }
 
     results = _create_posts(
         db=db, user=user,
