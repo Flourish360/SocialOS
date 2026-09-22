@@ -59,11 +59,11 @@ def sync_stats(current_user: User = Depends(get_current_user), db: Session = Dep
     errors = []
     synced = 0
     for a in accounts:
-        ok = sync_instagram_account(db, a)
+        ok, reason = sync_instagram_account(db, a)
         if ok:
             synced += 1
         else:
-            errors.append(f"handle={a.handle} user_id={a.platform_user_id}")
+            errors.append(f"handle={a.handle} user_id={a.platform_user_id}: {reason}")
     if synced == 0:
         detail = "Instagram sync failed"
         if errors:
