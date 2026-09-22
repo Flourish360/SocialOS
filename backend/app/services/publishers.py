@@ -660,6 +660,33 @@ def fetch_instagram_insights(access_token: str, media_id: str, media_type: str =
         return {"impressions": 0, "reach": 0, "likes": 0, "comments": 0, "saves": 0, "shares": 0, "total_interactions": 0}
 
 
+
+# Meta (Instagram/Facebook) returns these in a plain "error" string, not a
+# distinct HTTP status, when the stored token is no longer valid: the user
+# revoked the app's access, or Meta expired it. Neither platform has a
+# proactive refresh like Twitter/TikTok's ensure_*_token (Meta's long-lived
+# tokens don't rotate the way those do), so this is the only signal we get,
+# and until now nothing acted on it: the account stayed "connected" in
+# Settings forever while every post silently failed.
+_META_TOKEN_INVALID_SIGNATURES = (
+    "error validating access token",
+    "has not authorized application",
+    "invalid oauth access token",
+)
+
+
+def _mark_disconnected_if_token_invalid(account, db, result: dict, platform: str) -> dict:
+    if result.get("success"):
+        return result
+    error = (result.get("error") or "").lower()
+    if not any(sig in error for sig in _META_TOKEN_INVALID_SIGNATURES):
+        return result
+    account.is_connected = False
+    db.commit()
+    label = platform.capitalize()
+    return {**result, "error": f"{label} authorization was revoked, reconnect {label} in Settings"}
+
+
 def publish_to_platform(db, user_id: str, platform: str, caption: str, media_urls: list[str], media_type: str = "image") -> dict:
     """Look up the user's connected account for `platform` and publish to it.
     Shared dispatch used by both the manual Compose flow and the ecommerce
@@ -677,13 +704,14 @@ def publish_to_platform(db, user_id: str, platform: str, caption: str, media_url
         return {"platform": platform, "success": False, "error": "Not connected"}
 
     if platform == "instagram":
-        return {"platform": platform, **publish_to_instagram(
+        result = publish_to_instagram(
             access_token=account.access_token,
             ig_user_id=account.platform_user_id,
             caption=caption,
             media_urls=media_urls,
             media_type=media_type,
-        )}
+        )
+        return {"platform": platform, **_mark_disconnected_if_token_invalid(account, db, result, platform)}
     if platform == "twitter":
         if not ensure_twitter_token(account, db):
             return {"platform": "twitter", "success": False, "error": "Twitter token expired, reconnect Twitter in Settings"}
@@ -709,10 +737,11 @@ def publish_to_platform(db, user_id: str, platform: str, caption: str, media_url
             media_urls=media_urls,
         )}
     if platform == "facebook":
-        return {"platform": platform, **publish_to_facebook(
+        result = publish_to_facebook(
             access_token=account.access_token,
             page_id=account.platform_user_id,
             caption=caption,
             media_urls=media_urls,
-        )}
+        )
+        return {"platform": platform, **_mark_disconnected_if_token_invalid(account, db, result, platform)}
     return {"platform": platform, "success": False, "error": f"{platform} publishing not implemented yet"}
