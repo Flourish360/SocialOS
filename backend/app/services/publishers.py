@@ -42,6 +42,7 @@ def _ensure_instagram_jpeg(image_url: str) -> str:
     that were already JPEG.
     """
     if not _cloudinary_ready():
+        log.warning("Cloudinary not configured, sending Instagram the original URL unconverted: %s", image_url)
         return image_url
     try:
         import cloudinary.uploader
@@ -53,6 +54,7 @@ def _ensure_instagram_jpeg(image_url: str) -> str:
             resource_type="image",
             format="jpg",
         )
+        log.info("Instagram JPEG conversion: %s -> %s", image_url, result["secure_url"])
         return result["secure_url"]
     except Exception as e:
         log.warning("Instagram JPEG conversion failed for %s: %s", image_url, e)
@@ -70,6 +72,7 @@ def stamp_sold_photo(image_url: str) -> str:
     _ensure_instagram_jpeg: any failure returns the original URL untouched.
     """
     if not _cloudinary_ready():
+        log.warning("Cloudinary not configured, sold photo will post unstamped: %s", image_url)
         return image_url
     try:
         import cloudinary.uploader
@@ -99,6 +102,7 @@ def stamp_sold_photo(image_url: str) -> str:
                 {"gravity": "south_east", "x": 24, "y": 24, "flags": "layer_apply"},
             ],
         )
+        log.info("Sold stamp: %s -> %s", image_url, url)
         return url
     except Exception as e:
         log.warning("Sold stamp failed for %s: %s", image_url, e)
@@ -171,16 +175,18 @@ def publish_to_instagram(
 
                 child_ids: list[str] = []
                 for url in media_urls:
+                    ig_url = _ensure_instagram_jpeg(url)
                     child_resp = client.post(
                         f"{IG_API}/{ig_user_id}/media",
                         data={
-                            "image_url": _ensure_instagram_jpeg(url),
+                            "image_url": ig_url,
                             "is_carousel_item": "true",
                             "access_token": access_token,
                         },
                     )
                     child_data = child_resp.json()
                     if "id" not in child_data:
+                        log.warning("Instagram carousel child rejected %s: %s", ig_url, child_data.get("error"))
                         return {"success": False, "error": child_data.get("error", {}).get("message", "Failed to create carousel child")}
                     child_ids.append(child_data["id"])
 
@@ -210,16 +216,18 @@ def publish_to_instagram(
 
             else:
                 # ── Single image flow ────────────────────────────────────────
+                ig_url = _ensure_instagram_jpeg(media_urls[0])
                 container_resp = client.post(
                     f"{IG_API}/{ig_user_id}/media",
                     data={
-                        "image_url": _ensure_instagram_jpeg(media_urls[0]),
+                        "image_url": ig_url,
                         "caption": caption,
                         "access_token": access_token,
                     },
                 )
                 container_data = container_resp.json()
                 if "id" not in container_data:
+                    log.warning("Instagram media container rejected %s: %s", ig_url, container_data.get("error"))
                     return {"success": False, "error": container_data.get("error", {}).get("message", "Failed to create media container")}
 
                 creation_id = container_data["id"]
